@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DailyLog, Task, Goal, Quest, BossSeal, Record_, Challenge } from "@shared/schema";
+import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, Challenge } from "@shared/schema";
 import { useToday } from "@/hooks/useToday";
 import {
   HABITS,
@@ -56,6 +56,7 @@ export default function Overview() {
   const { data: seals = [] } = useQuery<BossSeal[]>({ queryKey: ["/api/boss-seals"] });
   const { data: records = [] } = useQuery<Record_[]>({ queryKey: ["/api/records"] });
   const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
+  const { data: completions = [] } = useQuery<QuestCompletion[]>({ queryKey: ["/api/quest-completions"] });
 
   const [rangeIdx, setRangeIdx] = useState(1);
   const range = RANGES[rangeIdx];
@@ -75,7 +76,7 @@ export default function Overview() {
   const openTodayTasks = tasks.filter((t) => t.list === "today" && !t.completed).length;
   const activeGoals = goals.filter((g) => g.status === "active").length;
 
-  const xp = useMemo(() => totalXP(logs, seals, quests), [logs, seals, quests]);
+  const xp = useMemo(() => totalXP(logs, seals, quests, completions), [logs, seals, quests, completions]);
   const rp = rankProgress(xp);
 
   // Active quests: not fully claimed, sorted by proximity to completion.

@@ -1,10 +1,10 @@
-import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, records, bossSeals } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
   Challenge, InsertChallenge,
   Ritual, InsertRitual,
-  Quest, InsertQuest,
+  Quest, InsertQuest, QuestCompletion,
   Record_, InsertRecord,
   BossSeal, InsertBossSeal,
 } from "@shared/schema";
@@ -33,6 +33,47 @@ export const pool = new Pool({
 });
 
 export const db = drizzle(pool);
+
+/* ============ Smart quest generator config ============ */
+
+type ScaleRule = { goalStep: (g: number) => number; xpMult: number };
+
+const SCALING: Record<string, ScaleRule> = {
+  perfect_streak:   { goalStep: (g) => g + 7,  xpMult: 1.25 },
+  workouts_week:    { goalStep: (g) => Math.min(g + 1, 7), xpMult: 1.5 },
+  sober_streak:     { goalStep: (g) => (g < 60 ? 60 : g < 90 ? 90 : g < 180 ? 180 : g < 365 ? 365 : g + 365), xpMult: 1.5 },
+  no_cheat_streak:  { goalStep: (g) => g + 7,  xpMult: 1.4 },
+  logged_days:      { goalStep: (g) => (g < 20 ? 20 : g < 30 ? 30 : g < 50 ? 50 : g < 90 ? 90 : g + 90), xpMult: 1.3 },
+  gratitude_streak: { goalStep: (g) => g + 7,  xpMult: 1.4 },
+};
+
+/** Roman-numeral suffix for a quest title, e.g. "IRON WEEK" → "IRON WEEK II". */
+function titleForTier(baseTitle: string, tier: number): string {
+  // Strip any prior Roman-numeral suffix (" II", " III", ...)
+  const stripped = baseTitle.replace(/\s+[IVX]+$/i, "").trim();
+  const numerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+  const suffix = numerals[tier - 1] ?? String(tier);
+  return `${stripped} ${suffix}`;
+}
+
+/** Rewrite the subtitle number to match the new goal. */
+function subtitleForGoal(baseSubtitle: string, goal: number, family: string): string {
+  if (!baseSubtitle) return baseSubtitle;
+  const unitByFamily: Record<string, string> = {
+    perfect_streak: "consecutive perfect days",
+    workouts_week: "lifts inside seven days",
+    sober_streak: "consecutive sober days",
+    no_cheat_streak: "days without a cheat",
+    logged_days: "days with every habit logged",
+    gratitude_streak: "days of the morning gratitude ritual",
+  };
+  const unit = unitByFamily[family];
+  if (!unit) {
+    // Fallback — replace any number in the subtitle with the new goal.
+    return baseSubtitle.replace(/\b\d+\b/, String(goal));
+  }
+  return `${goal} ${unit}.`;
+}
 
 /**
  * Bootstrap schema on startup. Uses CREATE TABLE IF NOT EXISTS so it's safe
@@ -134,9 +175,30 @@ export async function ensureSchema() {
       goal INTEGER NOT NULL,
       xp_reward INTEGER NOT NULL DEFAULT 100,
       progress INTEGER NOT NULL DEFAULT 0,
+      tier INTEGER NOT NULL DEFAULT 1,
+      family TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
       completed_at TEXT,
       claimed_at TEXT,
       updated_at TEXT NOT NULL
+    );
+    -- Additive migrations for old databases
+    ALTER TABLE quests ADD COLUMN IF NOT EXISTS tier INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE quests ADD COLUMN IF NOT EXISTS family TEXT;
+    ALTER TABLE quests ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1;
+
+    CREATE TABLE IF NOT EXISTS quest_completions (
+      id SERIAL PRIMARY KEY,
+      quest_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      motto TEXT,
+      icon TEXT,
+      tone TEXT NOT NULL,
+      tier INTEGER NOT NULL DEFAULT 1,
+      goal INTEGER NOT NULL,
+      xp_awarded INTEGER NOT NULL DEFAULT 0,
+      completed_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS records (
@@ -204,18 +266,18 @@ export async function ensureSchema() {
     const now = new Date().toISOString();
     // 6 seeded quests — designed to always have something in progress.
     const seed = [
-      { key: "iron_week",   title: "IRON WEEK",        subtitle: "Seven consecutive perfect days.",  motto: "Consistency is a weapon.", icon: "🛡", tone: "iron",  metric: "perfect_streak", goal: 7,   xp: 500 },
-      { key: "the_forge",   title: "THE FORGE",         subtitle: "Four lifts inside seven days.",     motto: "Steel is not born; it is hammered.", icon: "🔨", tone: "forge",  metric: "workouts_week", goal: 4,   xp: 250 },
-      { key: "clarity",     title: "CLARITY",           subtitle: "Thirty consecutive sober days.",     motto: "A clear mind is a sharp blade.", icon: "🌙", tone: "sober",  metric: "sober_streak",  goal: 30,  xp: 1000 },
-      { key: "purity",      title: "PURITY",            subtitle: "Fourteen days without a cheat.",     motto: "Discipline is freedom.", icon: "🤍", tone: "gold",   metric: "no_cheat_streak", goal: 14,  xp: 400 },
-      { key: "ledger_kept", title: "LEDGER KEPT",       subtitle: "Log every habit for ten days.",      motto: "What is measured is mastered.", icon: "📜", tone: "iron",   metric: "logged_days",    goal: 10,  xp: 200 },
-      { key: "iron_word",   title: "IRON WORD",         subtitle: "Answer the morning gratitude ritual for seven days.", motto: "My word is iron.", icon: "⚜", tone: "gold", metric: "gratitude_streak", goal: 7, xp: 300 },
+      { key: "iron_week_1",   family: "perfect_streak",    tier: 1, title: "IRON WEEK",        subtitle: "Seven consecutive perfect days.",  motto: "Consistency is a weapon.", icon: "🛡", tone: "iron",  metric: "perfect_streak",   goal: 7,   xp: 500 },
+      { key: "the_forge_1",   family: "workouts_week",     tier: 1, title: "THE FORGE",        subtitle: "Four lifts inside seven days.",     motto: "Steel is not born; it is hammered.", icon: "🔨", tone: "forge", metric: "workouts_week",    goal: 4,   xp: 250 },
+      { key: "clarity_1",     family: "sober_streak",      tier: 1, title: "CLARITY",          subtitle: "Thirty consecutive sober days.",     motto: "A clear mind is a sharp blade.", icon: "🌙", tone: "sober", metric: "sober_streak",     goal: 30,  xp: 1000 },
+      { key: "purity_1",      family: "no_cheat_streak",   tier: 1, title: "PURITY",           subtitle: "Fourteen days without a cheat.",     motto: "Discipline is freedom.", icon: "🤍", tone: "gold",  metric: "no_cheat_streak",  goal: 14,  xp: 400 },
+      { key: "ledger_kept_1", family: "logged_days",       tier: 1, title: "LEDGER KEPT",      subtitle: "Log every habit for ten days.",      motto: "What is measured is mastered.", icon: "📜", tone: "iron",  metric: "logged_days",      goal: 10,  xp: 200 },
+      { key: "iron_word_1",   family: "gratitude_streak",  tier: 1, title: "IRON WORD",        subtitle: "Answer the morning gratitude ritual for seven days.", motto: "My word is iron.", icon: "⚜", tone: "gold", metric: "gratitude_streak", goal: 7,   xp: 300 },
     ];
     for (const s of seed) {
       await pool.query(
-        `INSERT INTO quests (key, title, subtitle, motto, icon, tone, metric, goal, xp_reward, progress, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10)`,
-        [s.key, s.title, s.subtitle, s.motto, s.icon, s.tone, s.metric, s.goal, s.xp, now],
+        `INSERT INTO quests (key, title, subtitle, motto, icon, tone, metric, goal, xp_reward, progress, tier, family, active, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,1,$12)`,
+        [s.key, s.title, s.subtitle, s.motto, s.icon, s.tone, s.metric, s.goal, s.xp, s.tier, s.family, now],
       );
     }
   }
@@ -273,6 +335,8 @@ export interface IStorage {
   // Quests
   getQuests(): Promise<Quest[]>;
   updateQuest(key: string, patch: Partial<Quest>): Promise<Quest | undefined>;
+  claimQuest(key: string): Promise<{ claimed: Quest; nextQuest: Quest | null }>;
+  getQuestCompletions(): Promise<QuestCompletion[]>;
   // Records
   getRecords(): Promise<Record_[]>;
   updateRecord(key: string, patch: Partial<Record_>): Promise<Record_ | undefined>;
@@ -403,7 +467,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getQuests() {
-    return db.select().from(quests).orderBy(quests.id);
+    return db.select().from(quests).where(eq(quests.active, 1)).orderBy(quests.id);
   }
   async updateQuest(key: string, patch: Partial<Quest>) {
     const now = new Date().toISOString();
@@ -413,6 +477,100 @@ export class DatabaseStorage implements IStorage {
       .where(eq(quests.key, key))
       .returning();
     return rows[0];
+  }
+
+  async getQuestCompletions() {
+    return db.select().from(questCompletions).orderBy(desc(questCompletions.id));
+  }
+
+  /**
+   * Claim a quest — mark it done, archive it into questCompletions,
+   * and spawn a new harder quest in the same family.
+   *
+   * Scaling rules per family:
+   *   perfect_streak   : +7 goal, +1.25x XP  (7 → 14 → 21 → 30 → 45 → 60 …)
+   *   workouts_week    : +1 goal, +1.5x XP    (4 → 5 → 6 → 7 lifts/wk)
+   *   sober_streak     : +30 goal, +1.5x XP   (30 → 60 → 90 → 180 → 365)
+   *   no_cheat_streak  : +7 goal, +1.4x XP    (14 → 21 → 30 → 45)
+   *   logged_days      : +10 goal, +1.3x XP   (10 → 20 → 30 → 50 → 90)
+   *   gratitude_streak : +7 goal, +1.4x XP    (7 → 14 → 21 → 30)
+   */
+  async claimQuest(key: string): Promise<{ claimed: Quest; nextQuest: Quest | null }> {
+    const now = new Date().toISOString();
+    const rows = await db.select().from(quests).where(eq(quests.key, key));
+    const q = rows[0];
+    if (!q) throw new Error(`Quest not found: ${key}`);
+
+    // 1. Mark this quest as claimed + inactive
+    const updated = await db
+      .update(quests)
+      .set({ claimedAt: now, active: 0, updatedAt: now })
+      .where(eq(quests.key, key))
+      .returning();
+
+    // 2. Log the completion for the Trophy Hall
+    await db.insert(questCompletions).values({
+      questKey: q.key,
+      title: q.title,
+      subtitle: q.subtitle,
+      motto: q.motto,
+      icon: q.icon,
+      tone: q.tone,
+      tier: q.tier,
+      goal: q.goal,
+      xpAwarded: q.xpReward,
+      completedAt: now,
+    });
+
+    // 3. Spawn the next tier in the same family (harder version)
+    const nextTier = (q.tier ?? 1) + 1;
+    const family = q.family ?? q.metric;
+    const scale = SCALING[family] ?? { goalStep: (g: number) => g + 5, xpMult: 1.4 };
+    const nextGoal = scale.goalStep(q.goal);
+    const nextXP = Math.round(q.xpReward * scale.xpMult);
+    const nextKey = `${family}_${nextTier}`;
+
+    // Only spawn if the key doesn't already exist (idempotent).
+    const existingRows = await db.select().from(quests).where(eq(quests.key, nextKey));
+    let nextQuest: Quest | null = null;
+    if (existingRows.length === 0) {
+      const titleUp = titleForTier(q.title, nextTier);
+      const subtitleUp = subtitleForGoal(q.subtitle ?? "", nextGoal, family);
+      const inserted = await db
+        .insert(quests)
+        .values({
+          key: nextKey,
+          title: titleUp,
+          subtitle: subtitleUp,
+          motto: q.motto,
+          icon: q.icon,
+          tone: q.tone,
+          metric: q.metric,
+          goal: nextGoal,
+          xpReward: nextXP,
+          progress: 0,
+          tier: nextTier,
+          family,
+          active: 1,
+          updatedAt: now,
+        })
+        .returning();
+      nextQuest = inserted[0];
+    } else {
+      // Re-activate the existing next-tier quest if it's dormant
+      const existing = existingRows[0];
+      if (existing.active === 0) {
+        const rows2 = await db
+          .update(quests)
+          .set({ active: 1, progress: 0, claimedAt: null, completedAt: null, updatedAt: now })
+          .where(eq(quests.key, nextKey))
+          .returning();
+        nextQuest = rows2[0];
+      } else {
+        nextQuest = existing;
+      }
+    }
+    return { claimed: updated[0], nextQuest };
   }
 
   async getRecords() {
@@ -443,16 +601,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async resetAll() {
+    const now = new Date().toISOString();
     await db.delete(dailyLogs);
     await db.delete(tasks);
     await db.delete(journal);
     await db.delete(goals);
     await db.delete(challenges);
     await db.delete(bossSeals);
-    // Reset quest progress but keep the definitions
-    await db.update(quests).set({ progress: 0, completedAt: null, claimedAt: null, updatedAt: new Date().toISOString() });
+    // Nuke quest history so the Trophy Hall is clean
+    await db.delete(questCompletions);
+    // Drop every quest, then reseed the tier-1 originals so the app never
+    // shows a phantom tier-2 quest without its tier-1 completion.
+    await db.delete(quests);
+    const seed = [
+      { key: "iron_week_1",   family: "perfect_streak",    title: "IRON WEEK",    subtitle: "Seven consecutive perfect days.",           motto: "Consistency is a weapon.", icon: "🛡", tone: "iron",  metric: "perfect_streak",   goal: 7,   xp: 500 },
+      { key: "the_forge_1",   family: "workouts_week",     title: "THE FORGE",    subtitle: "Four lifts inside seven days.",             motto: "Steel is not born; it is hammered.", icon: "🔨", tone: "forge", metric: "workouts_week",    goal: 4,   xp: 250 },
+      { key: "clarity_1",     family: "sober_streak",      title: "CLARITY",      subtitle: "Thirty consecutive sober days.",             motto: "A clear mind is a sharp blade.", icon: "🌙", tone: "sober", metric: "sober_streak",     goal: 30,  xp: 1000 },
+      { key: "purity_1",      family: "no_cheat_streak",   title: "PURITY",       subtitle: "Fourteen days without a cheat.",             motto: "Discipline is freedom.", icon: "🤍", tone: "gold",  metric: "no_cheat_streak",  goal: 14,  xp: 400 },
+      { key: "ledger_kept_1", family: "logged_days",       title: "LEDGER KEPT",  subtitle: "Log every habit for ten days.",              motto: "What is measured is mastered.", icon: "📜", tone: "iron",  metric: "logged_days",      goal: 10,  xp: 200 },
+      { key: "iron_word_1",   family: "gratitude_streak",  title: "IRON WORD",    subtitle: "Answer the morning gratitude ritual for seven days.", motto: "My word is iron.", icon: "⚜", tone: "gold", metric: "gratitude_streak", goal: 7, xp: 300 },
+    ];
+    for (const s of seed) {
+      await db.insert(quests).values({
+        key: s.key, title: s.title, subtitle: s.subtitle, motto: s.motto, icon: s.icon, tone: s.tone,
+        metric: s.metric, goal: s.goal, xpReward: s.xp, progress: 0, tier: 1, family: s.family, active: 1, updatedAt: now,
+      });
+    }
     // Reset record values but keep the definitions
-    await db.update(records).set({ value: 0, setOnDate: null, seenAt: null, updatedAt: new Date().toISOString() });
+    await db.update(records).set({ value: 0, setOnDate: null, seenAt: null, updatedAt: now });
     // Keep rituals — they're the user's identity, not their data
   }
 }

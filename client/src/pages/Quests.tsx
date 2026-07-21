@@ -46,6 +46,15 @@ export default function QuestsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/quests"] }),
   });
 
+  // Claim endpoint: archives the quest, spawns the next tier, returns { claimed, nextQuest }.
+  const claimQuest = useMutation({
+    mutationFn: async (key: string) => apiRequest("POST", `/api/quests/${key}/claim`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quest-completions"] });
+    },
+  });
+
   // Recompute progress and reconcile with server.
   const inFlight = useRef(new Set<string>());
   useEffect(() => {
@@ -89,30 +98,16 @@ export default function QuestsPage() {
   const handleClaim = (q: Quest) => {
     playSound("sparkle");
     haptic("success");
-    // Reset progress for a new cycle + record claim timestamp
-    patchQuest.mutate({
-      key: q.key,
-      patch: {
-        claimedAt: new Date().toISOString(),
-        progress: 0,
-        completedAt: null,
-      },
-    });
-    // Re-open for a fresh cycle after a short delay
-    setTimeout(() => {
-      sessionFiredComplete.delete(q.key);
-      patchQuest.mutate({
-        key: q.key,
-        patch: { claimedAt: null },
-      });
-    }, 900);
+    sessionFiredComplete.delete(q.key);
+    // Archive this quest + spawn a harder next-tier quest.
+    claimQuest.mutate(q.key);
   };
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-10">
       <PageHeader
         title="Quests"
-        subtitle="Six side-objectives that never let the game go quiet."
+        subtitle="Conquer one and a harder one takes its place. The game never stops levelling up."
       />
 
       <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="quest-grid">
@@ -128,11 +123,15 @@ export default function QuestsPage() {
   );
 }
 
+const TIER_NUMERAL = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
 function QuestCard({ quest, onClaim }: { quest: Quest; onClaim: () => void }) {
   const tone = TONE_COLORS[quest.tone] ?? TONE_COLORS.iron;
   const pct = Math.max(0, Math.min(1, quest.progress / quest.goal));
   const complete = isQuestComplete(quest);
   const ready = complete && !quest.claimedAt;
+  const tier = quest.tier ?? 1;
+  const tierLabel = TIER_NUMERAL[tier - 1] ?? String(tier);
   return (
     <div
       className={cn(
@@ -169,11 +168,22 @@ function QuestCard({ quest, onClaim }: { quest: Quest; onClaim: () => void }) {
         </div>
       </div>
 
-      <div
-        className="serif-hero uppercase leading-none text-2xl mb-2"
-        style={{ color: tone.accent, letterSpacing: "0.06em" }}
-      >
-        {quest.title}
+      <div className="flex items-baseline gap-2 mb-2">
+        <div
+          className="serif-hero uppercase leading-none text-2xl"
+          style={{ color: tone.accent, letterSpacing: "0.06em" }}
+        >
+          {quest.title}
+        </div>
+        {tier > 1 && (
+          <span
+            className="serif italic text-[11px] tracking-[0.2em] uppercase opacity-80"
+            style={{ color: tone.accent }}
+            data-testid={`quest-tier-${quest.key}`}
+          >
+            · Tier {tierLabel}
+          </span>
+        )}
       </div>
       <div className="serif text-sm opacity-85" style={{ color: "hsl(38 20% 90%)" }}>
         {quest.subtitle}
@@ -225,14 +235,7 @@ function QuestCard({ quest, onClaim }: { quest: Quest; onClaim: () => void }) {
           Claim Reward
         </button>
       )}
-      {!ready && complete && (
-        <div
-          className="mt-5 rounded-sm border py-2.5 text-center text-xs uppercase tracking-[0.35em] opacity-80"
-          style={{ borderColor: `${tone.accent}55`, color: tone.accent, fontFamily: "'Inter', sans-serif" }}
-        >
-          Claimed · Renewing
-        </div>
-      )}
+
       {!complete && (
         <div className="mt-5 text-center text-[10px] tracking-[0.3em] uppercase opacity-50" style={{ fontFamily: "'Inter', sans-serif" }}>
           In Progress

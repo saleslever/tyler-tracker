@@ -1,4 +1,4 @@
-import type { DailyLog, Quest, BossSeal } from "@shared/schema";
+import type { DailyLog, Quest, QuestCompletion, BossSeal } from "@shared/schema";
 import { HABITS, habitHit, addDays } from "./analytics";
 
 /**
@@ -56,16 +56,25 @@ export function xpBetween(logs: DailyLog[], from: string, to: string): number {
 /**
  * Total lifetime XP.
  * Includes: per-log XP, boss seal bonuses, streak-compound bonuses, and claimed quests.
+ *
+ * Quest XP is sourced from the immutable questCompletions log (Trophy Hall).
+ * If completions haven't loaded yet, we fall back to any legacy claimedAt on
+ * the active quest list — so upgrades from the old schema don't lose XP.
  */
 export function totalXP(
   logs: DailyLog[],
   bossSeals: BossSeal[],
   quests: Quest[],
+  completions: QuestCompletion[] = [],
 ): number {
   let xp = 0;
   for (const l of logs) xp += xpFromLog(l);
   for (const s of bossSeals) xp += XP.BOSS_SEAL;
-  for (const q of quests) if (q.claimedAt) xp += q.xpReward;
+  if (completions.length > 0) {
+    for (const c of completions) xp += c.xpAwarded;
+  } else {
+    for (const q of quests) if (q.claimedAt) xp += q.xpReward;
+  }
   // Compound streak bonus: for every day where the previous day was also perfect,
   // grant +5 XP per day currently on the streak (as of that day).
   // Order logs by date for the walk.

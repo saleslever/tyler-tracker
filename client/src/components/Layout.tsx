@@ -16,10 +16,12 @@ import {
   Volume2,
   VolumeX,
   Swords,
+  Crown,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
 import { RankUpCeremony } from "./RankUpCeremony";
+import { GlobalClickSounds } from "./GlobalClickSounds";
 import { DailyBossVictory } from "./DailyBossVictory";
 import { NewRecordCelebration } from "./NewRecordCelebration";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,7 @@ const NAV = [
     items: [
       { href: "/alignment", label: "Morning Alignment", icon: Target },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/milestones", label: "Milestones", icon: Crown },
     ],
   },
 ];
@@ -152,6 +155,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Main */}
       <main className="flex-1 min-w-0 md:pt-0 pt-14">{children}</main>
+
+      {/* Global click sounds — makes the whole app feel alive */}
+      <GlobalClickSounds />
 
       {/* Global ceremonies — mounted once, listen for events */}
       <GlobalCeremonies />

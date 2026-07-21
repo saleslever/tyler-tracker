@@ -13,6 +13,7 @@ import JournalPage from "@/pages/Journal";
 import MorningAlignment from "@/pages/MorningAlignment";
 import Challenge from "@/pages/Challenge";
 import Quests from "@/pages/Quests";
+import Milestones from "@/pages/Milestones";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
@@ -28,6 +29,7 @@ function AppRouter() {
         <Route path="/goals" component={MorningAlignment} />
         <Route path="/challenge" component={Challenge} />
         <Route path="/quests" component={Quests} />
+        <Route path="/milestones" component={Milestones} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

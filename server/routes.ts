@@ -146,6 +146,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // Claim a quest — archives it into completions and spawns the next tier.
+  app.post("/api/quests/:key/claim", async (req, res) => {
+    try {
+      res.json(await storage.claimQuest(req.params.key));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  // Trophy Hall — immutable log of every quest completed
+  app.get("/api/quest-completions", async (_req, res) => res.json(await storage.getQuestCompletions()));
+
   // Records
   app.get("/api/records", async (_req, res) => res.json(await storage.getRecords()));
   const patchRecord = z.object({

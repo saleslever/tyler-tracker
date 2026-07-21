@@ -27,7 +27,10 @@ type SoundKey =
   | "rankUp"     // rank ceremony (big brass)
   | "questDone"  // quest completed
   | "record"     // new personal record
-  | "bossHorn";  // daily boss victory
+  | "bossHorn"   // daily boss victory
+  | "navTick"    // sidebar tab click — soft, immediate
+  | "buttonClink"// generic button press — subtle metallic
+  | "pageTurn"   // route change — brief whoosh
 
 const MP3_SOURCES: Partial<Record<SoundKey, string>> = {
   check: checkSfx,
@@ -271,6 +274,46 @@ function playRecord() {
   });
 }
 
+/** NAV TICK — barely-audible high tick for tab clicks. Fires often, so keep it whisper-quiet. */
+function playNavTick() {
+  playTone({ freq: 1760, duration: 0.08, overtones: [1, 2], gain: 0.06, wave: "sine", attack: 0.001, detune: 4 });
+}
+
+/** BUTTON CLINK — subtle metallic press for general buttons. Two-note descending. */
+function playButtonClink() {
+  playTone({ freq: 1046.5, duration: 0.12, overtones: [1, 2.1], gain: 0.09, wave: "sine", attack: 0.001, detune: 6 });
+  setTimeout(() => {
+    playTone({ freq: 783.99, duration: 0.10, overtones: [1, 2], gain: 0.05, wave: "triangle", attack: 0.001 });
+  }, 20);
+}
+
+/** PAGE TURN — brief airy whoosh for route changes. */
+function playPageTurn() {
+  const ctx = getCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  // Filtered noise burst
+  const bufSize = ctx.sampleRate * 0.28;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2.2);
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(1600, now);
+  filter.frequency.exponentialRampToValueAtTime(4000, now + 0.28);
+  filter.Q.value = 1.6;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+  src.connect(filter).connect(gain).connect(ctx.destination);
+  src.start(now);
+  src.stop(now + 0.3);
+}
+
 /** BOSS HORN — the DAILY BOSS victory. Low horn + gong + rising fifth. */
 function playBossHorn() {
   // Deep war horn
@@ -340,6 +383,9 @@ export function playSound(key: SoundKey) {
       case "questDone": playQuestDone(); return;
       case "record": playRecord(); return;
       case "bossHorn": playBossHorn(); return;
+      case "navTick": playNavTick(); return;
+      case "buttonClink": playButtonClink(); return;
+      case "pageTurn": playPageTurn(); return;
     }
   } catch {
     // No-op — never let audio break the UI.

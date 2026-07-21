@@ -163,10 +163,35 @@ export const quests = pgTable("quests", {
   goal: integer("goal").notNull(),
   xpReward: integer("xp_reward").notNull().default(100),
   progress: integer("progress").notNull().default(0),
+  tier: integer("tier").notNull().default(1),
+  family: text("family"),
+  active: integer("active").notNull().default(1),
   completedAt: text("completed_at"),
   claimedAt: text("claimed_at"),
   updatedAt: text("updated_at").notNull(),
 });
+
+/**
+ * questCompletions — immutable log of every quest ever conquered.
+ *
+ * Populated on claim. Used by the Trophy Hall / Milestones page.
+ */
+export const questCompletions = pgTable("quest_completions", {
+  id: serial("id").primaryKey(),
+  questKey: text("quest_key").notNull(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle"),
+  motto: text("motto"),
+  icon: text("icon"),
+  tone: text("tone").notNull(),
+  tier: integer("tier").notNull().default(1),
+  goal: integer("goal").notNull(),
+  xpAwarded: integer("xp_awarded").notNull().default(0),
+  completedAt: text("completed_at").notNull(),
+});
+export const insertQuestCompletionSchema = createInsertSchema(questCompletions).omit({ id: true });
+export type InsertQuestCompletion = z.infer<typeof insertQuestCompletionSchema>;
+export type QuestCompletion = typeof questCompletions.$inferSelect;
 export const insertQuestSchema = createInsertSchema(quests).omit({
   id: true, updatedAt: true,
 });
