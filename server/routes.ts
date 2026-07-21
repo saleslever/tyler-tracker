@@ -7,6 +7,7 @@ import {
   insertJournalSchema,
   insertGoalSchema,
   insertChallengeSchema,
+  insertRitualSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -84,6 +85,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     title: z.string().optional(),
     detail: z.string().nullable().optional(),
     category: z.string().optional(),
+    horizon: z.string().optional(),
     targetDate: z.string().nullable().optional(),
     progress: z.number().optional(),
     status: z.string().optional(),
@@ -115,6 +117,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/challenges/:id", async (req, res) => {
     await storage.deleteChallenge(Number(req.params.id));
     res.json({ ok: true });
+  });
+
+  // Rituals
+  app.get("/api/rituals", async (_req, res) => res.json(await storage.getRituals()));
+  app.get("/api/rituals/:key", async (req, res) => {
+    res.json(await storage.getRitual(req.params.key) ?? null);
+  });
+  const patchRitual = insertRitualSchema.partial();
+  app.patch("/api/rituals/:key", async (req, res) => {
+    try {
+      const p = patchRitual.parse(req.body);
+      res.json(await storage.upsertRitual(req.params.key, p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
   return httpServer;

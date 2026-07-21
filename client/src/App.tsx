@@ -10,7 +10,7 @@ import Habits from "@/pages/Habits";
 import Tasks from "@/pages/Tasks";
 import Analytics from "@/pages/Analytics";
 import JournalPage from "@/pages/Journal";
-import Goals from "@/pages/Goals";
+import MorningAlignment from "@/pages/MorningAlignment";
 import Challenge from "@/pages/Challenge";
 import NotFound from "@/pages/not-found";
 
@@ -23,7 +23,8 @@ function AppRouter() {
         <Route path="/tasks" component={Tasks} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/journal" component={JournalPage} />
-        <Route path="/goals" component={Goals} />
+        <Route path="/alignment" component={MorningAlignment} />
+        <Route path="/goals" component={MorningAlignment} />
         <Route path="/challenge" component={Challenge} />
         <Route component={NotFound} />
       </Switch>

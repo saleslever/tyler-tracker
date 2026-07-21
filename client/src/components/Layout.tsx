@@ -13,9 +13,12 @@ import {
   RotateCcw,
   AlertTriangle,
   Trophy,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isMuted, setMuted } from "@/hooks/useSound";
 
 const NAV = [
   {
@@ -34,7 +37,7 @@ const NAV = [
   {
     section: "Long Game",
     items: [
-      { href: "/goals", label: "Goals", icon: Target },
+      { href: "/alignment", label: "Morning Alignment", icon: Target },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
     ],
   },
@@ -45,6 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [, setMuteTick] = useState(0);
 
   const isActive = (href: string) => (href === "/" ? location === "/" : location.startsWith(href));
 
@@ -122,6 +126,13 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="border-t border-sidebar-border p-4">
           <div className="microlabel">System</div>
           <div className="text-xs text-muted-foreground mt-1 mb-3">v1.0 · Local</div>
+          <button
+            onClick={() => { setMuted(!isMuted()); setMuteTick((t) => t + 1); }}
+            className="w-full text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border hover:border-foreground/40 rounded px-3 py-2 flex items-center justify-center gap-1.5 transition-colors mb-2"
+            data-testid="btn-toggle-sound"
+          >
+            {isMuted() ? <><VolumeX className="w-3.5 h-3.5" /> Sound off</> : <><Volume2 className="w-3.5 h-3.5" /> Sound on</>}
+          </button>
           <button
             onClick={() => setResetOpen(true)}
             className="w-full text-xs uppercase tracking-wider text-muted-foreground hover:text-destructive border border-border hover:border-destructive/60 rounded px-3 py-2 flex items-center justify-center gap-1.5 transition-colors"

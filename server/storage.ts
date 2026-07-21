@@ -1,8 +1,9 @@
-import { dailyLogs, tasks, journal, goals, challenges } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
   Challenge, InsertChallenge,
+  Ritual, InsertRitual,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -55,6 +56,9 @@ export async function ensureSchema() {
     );
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS low_carb INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS cheat_day INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_1 TEXT;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_3 TEXT;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_possession TEXT;
 
     CREATE TABLE IF NOT EXISTS tasks (
       id SERIAL PRIMARY KEY,
@@ -80,11 +84,13 @@ export async function ensureSchema() {
       title TEXT NOT NULL,
       detail TEXT,
       category TEXT NOT NULL DEFAULT 'business',
+      horizon TEXT NOT NULL DEFAULT 'twelve_month',
       target_date TEXT,
       progress INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL
     );
+    ALTER TABLE goals ADD COLUMN IF NOT EXISTS horizon TEXT NOT NULL DEFAULT 'twelve_month';
 
     CREATE TABLE IF NOT EXISTS challenges (
       id SERIAL PRIMARY KEY,
@@ -103,7 +109,56 @@ export async function ensureSchema() {
     ALTER TABLE challenges ADD COLUMN IF NOT EXISTS optional_habits TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE challenges ADD COLUMN IF NOT EXISTS cheat_days_per_week INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE challenges DROP COLUMN IF EXISTS habit_keys;
+
+    CREATE TABLE IF NOT EXISTS rituals (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      items TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  // Seed default rituals on first boot (only if the table is empty)
+  const existing = await pool.query(`SELECT COUNT(*)::int AS n FROM rituals`);
+  if (existing.rows[0].n === 0) {
+    await pool.query(
+      `INSERT INTO rituals (key, title, subtitle, items, updated_at) VALUES
+        ('why', $1, $2, $3, $10),
+        ('questions', $4, $5, $6, $10),
+        ('code', $7, $8, $9, $10)`,
+      [
+        "My Why",
+        "Health & weight loss reasons that don't move",
+        JSON.stringify([
+          "Become an example for my son to look up to and admire while having me around for 40 years (80 Years+)",
+          "Being able to fit in my clothes without feeling my love handles and stomach",
+          "Being able to look in the mirror and be proud of what I am looking at, not disgusted",
+          "Not feeling insecure and confident when I am around people at events & family functions",
+          "No more alcohol to save my liver, add years back to my life and stop borrowing from tomorrow's happiness",
+        ]),
+        "5 Major Questions to Start My Morning",
+        "Answer these silently. Every day.",
+        JSON.stringify([
+          "What do I need to do every day to achieve my weight loss goals?",
+          "What must be true of me to reach the success of a 1% man?",
+          "How do I need to transform as a man to have a loving and long-term healthy relationship with Kalyn?",
+          "What needs to happen to give my family freedom and create future experiences?",
+          "How will I feel one year from now if I don't take any of these questions seriously?",
+        ]),
+        "My Code as a Man",
+        "Read these out loud before your feet hit the floor.",
+        JSON.stringify([
+          "I believe with extreme conviction that I am THE MAN and can achieve absolutely anything I want to. This is my world, and other people just live in it.",
+          "My word is made of IRON and cannot be broken. Everything I say must be done. Words will never be just words again.",
+          "I am the kind of man who doesn't drink alcohol because it puts my future, relationships, health, and life completely at risk. Stop borrowing tomorrow's happiness.",
+          "I am a man who doesn't get emotional or allow myself to come off-center. I am a rock in the ocean full of hurricanes and will never be moved.",
+        ]),
+        new Date().toISOString(),
+      ],
+    );
+  }
 }
 
 export interface IStorage {
@@ -131,6 +186,10 @@ export interface IStorage {
   getActiveChallenge(today: string): Promise<Challenge | undefined>;
   createChallenge(c: InsertChallenge): Promise<Challenge>;
   deleteChallenge(id: number): Promise<void>;
+  // Rituals
+  getRituals(): Promise<Ritual[]>;
+  getRitual(key: string): Promise<Ritual | undefined>;
+  upsertRitual(key: string, patch: Partial<InsertRitual>): Promise<Ritual>;
   // Reset
   resetAll(): Promise<void>;
 }
@@ -223,12 +282,44 @@ export class DatabaseStorage implements IStorage {
     await db.delete(challenges).where(eq(challenges.id, id));
   }
 
+  async getRituals() {
+    return db.select().from(rituals).orderBy(rituals.id);
+  }
+  async getRitual(key: string) {
+    const rows = await db.select().from(rituals).where(eq(rituals.key, key));
+    return rows[0];
+  }
+  async upsertRitual(key: string, patch: Partial<InsertRitual>) {
+    const existing = await this.getRitual(key);
+    const now = new Date().toISOString();
+    if (existing) {
+      const rows = await db
+        .update(rituals)
+        .set({ ...patch, updatedAt: now })
+        .where(eq(rituals.key, key))
+        .returning();
+      return rows[0];
+    }
+    const rows = await db
+      .insert(rituals)
+      .values({
+        key,
+        title: patch.title ?? key,
+        subtitle: patch.subtitle ?? null,
+        items: patch.items ?? "[]",
+        updatedAt: now,
+      })
+      .returning();
+    return rows[0];
+  }
+
   async resetAll() {
     await db.delete(dailyLogs);
     await db.delete(tasks);
     await db.delete(journal);
     await db.delete(goals);
     await db.delete(challenges);
+    // Keep rituals — they're the user's identity, not their data
   }
 }
 

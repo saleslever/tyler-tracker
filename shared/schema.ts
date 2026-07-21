@@ -23,6 +23,10 @@ export const dailyLogs = pgTable("daily_logs", {
   workout: integer("workout").notNull().default(0),
   lowCarb: integer("low_carb").notNull().default(0),
   cheatDay: integer("cheat_day").notNull().default(0),
+  // Morning gratitude ritual — three prompts from the Notion doc
+  gratitude1: text("gratitude_1"),        // #1 thing you're grateful for
+  gratitude3: text("gratitude_3"),        // 3 things
+  gratitudePossession: text("gratitude_possession"), // possession you take for granted
 });
 export const insertDailyLogSchema = createInsertSchema(dailyLogs).omit({ id: true });
 export type InsertDailyLog = z.infer<typeof insertDailyLogSchema>;
@@ -57,12 +61,20 @@ export const insertJournalSchema = createInsertSchema(journal).omit({ id: true }
 export type InsertJournal = z.infer<typeof insertJournalSchema>;
 export type Journal = typeof journal.$inferSelect;
 
-/** Goals — longer-term with target date and progress %. */
+/**
+ * Goals — longer-term with target date and progress %.
+ *
+ * horizon:
+ *   twelve_month — annual ("12-month goal")
+ *   ninety_day   — 90-day milestone
+ *   long_term    — >1yr, aspirational
+ */
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   detail: text("detail"),
-  category: text("category").notNull().default("business"), // business | health | personal | wealth
+  category: text("category").notNull().default("business"), // business | health | wealth | personal | relationship
+  horizon: text("horizon").notNull().default("twelve_month"), // twelve_month | ninety_day | long_term
   targetDate: text("target_date"),
   progress: integer("progress").notNull().default(0), // 0-100
   status: text("status").notNull().default("active"), // active | done | paused
@@ -100,3 +112,26 @@ export const insertChallengeSchema = createInsertSchema(challenges).omit({
 });
 export type InsertChallenge = z.infer<typeof insertChallengeSchema>;
 export type Challenge = typeof challenges.$inferSelect;
+
+/**
+ * Rituals — the fixed morning-alignment text sections from the Notion doc.
+ *
+ *   key: unique slug for the section (why | questions | code | milestones)
+ *   title: display title
+ *   subtitle: optional subtitle/description
+ *   items: JSON string array of bullet strings
+ *   updatedAt: ISO timestamp
+ */
+export const rituals = pgTable("rituals", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle"),
+  items: text("items").notNull().default("[]"), // JSON string array
+  updatedAt: text("updated_at").notNull(),
+});
+export const insertRitualSchema = createInsertSchema(rituals).omit({
+  id: true, updatedAt: true,
+});
+export type InsertRitual = z.infer<typeof insertRitualSchema>;
+export type Ritual = typeof rituals.$inferSelect;
