@@ -3,6 +3,7 @@ import express, { Response, NextFunction } from 'express';
 import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import { ensureSchema } from "./storage";
 import { createServer } from "node:http";
 
 const app = express();
@@ -62,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Create tables if they don't exist yet (safe on every boot).
+  await ensureSchema();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

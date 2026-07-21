@@ -1,75 +1,119 @@
 import type { Express } from "express";
-import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { storage } from "./storage";
-import { insertDailyLogSchema, insertTaskSchema } from "@shared/schema";
+import {
+  insertDailyLogSchema,
+  insertTaskSchema,
+  insertJournalSchema,
+  insertGoalSchema,
+  insertChallengeSchema,
+} from "@shared/schema";
 import { z } from "zod";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  // --- Daily log routes ---
-
-  app.get("/api/logs", async (_req, res) => {
-    const logs = await storage.getAllLogs();
-    res.json(logs);
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Reset (nukes everything)
+  app.post("/api/reset", async (_req, res) => {
+    await storage.resetAll();
+    res.json({ ok: true });
   });
 
-  app.get("/api/logs/:date", async (req, res) => {
-    const log = await storage.getLog(req.params.date);
-    res.json(log ?? null);
+  // Logs
+  app.get("/api/logs", async (_req, res) => res.json(await storage.getAllLogs()));
+  app.get("/api/logs/:date", async (req, res) => res.json(await storage.getLog(req.params.date) ?? null));
+
+  // Delete a specific day's log (clears that date entirely)
+  app.delete("/api/logs/:date", async (req, res) => {
+    await storage.deleteLog(req.params.date);
+    res.json({ ok: true });
   });
 
-  const patchLogSchema = insertDailyLogSchema.partial().omit({ date: true });
-
+  const patchLog = insertDailyLogSchema.partial().omit({ date: true });
   app.patch("/api/logs/:date", async (req, res) => {
     try {
-      const patch = patchLogSchema.parse(req.body);
-      const log = await storage.upsertLog(req.params.date, patch);
-      res.json(log);
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
-    }
+      const p = patchLog.parse(req.body);
+      res.json(await storage.upsertLog(req.params.date, p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
-  // --- Task routes ---
-
-  app.get("/api/tasks", async (_req, res) => {
-    const tasks = await storage.getTasks();
-    res.json(tasks);
-  });
-
+  // Tasks
+  app.get("/api/tasks", async (_req, res) => res.json(await storage.getTasks()));
   app.post("/api/tasks", async (req, res) => {
     try {
-      const parsed = insertTaskSchema.parse(req.body);
-      const task = await storage.createTask(parsed);
-      res.json(task);
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
-    }
+      const p = insertTaskSchema.parse(req.body);
+      res.json(await storage.createTask(p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-
-  const updateTaskSchema = z.object({
+  const updateTaskS = z.object({
     title: z.string().optional(),
     list: z.enum(["today", "backlog"]).optional(),
     priority: z.enum(["high", "med", "low"]).optional(),
     completed: z.number().optional(),
     completedAt: z.string().nullable().optional(),
   });
-
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      const patch = updateTaskSchema.parse(req.body);
-      const task = await storage.updateTask(Number(req.params.id), patch);
-      res.json(task);
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
-    }
+      const p = updateTaskS.parse(req.body);
+      res.json(await storage.updateTask(Number(req.params.id), p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-
   app.delete("/api/tasks/:id", async (req, res) => {
     await storage.deleteTask(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // Journal
+  app.get("/api/journal", async (_req, res) => res.json(await storage.getAllJournal()));
+  app.get("/api/journal/:date", async (req, res) => res.json(await storage.getJournal(req.params.date) ?? null));
+  const patchJournal = insertJournalSchema.partial().omit({ date: true });
+  app.patch("/api/journal/:date", async (req, res) => {
+    try {
+      const p = patchJournal.parse(req.body);
+      res.json(await storage.upsertJournal(req.params.date, p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  // Goals
+  app.get("/api/goals", async (_req, res) => res.json(await storage.getGoals()));
+  app.post("/api/goals", async (req, res) => {
+    try {
+      const p = insertGoalSchema.parse(req.body);
+      res.json(await storage.createGoal(p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  const updateGoalS = z.object({
+    title: z.string().optional(),
+    detail: z.string().nullable().optional(),
+    category: z.string().optional(),
+    targetDate: z.string().nullable().optional(),
+    progress: z.number().optional(),
+    status: z.string().optional(),
+  });
+  app.patch("/api/goals/:id", async (req, res) => {
+    try {
+      const p = updateGoalS.parse(req.body);
+      res.json(await storage.updateGoal(Number(req.params.id), p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  app.delete("/api/goals/:id", async (req, res) => {
+    await storage.deleteGoal(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // Challenges
+  app.get("/api/challenges", async (_req, res) => res.json(await storage.getChallenges()));
+  app.get("/api/challenges/active", async (req, res) => {
+    const today = (req.query.today as string) || new Date().toISOString().slice(0, 10);
+    const active = await storage.getActiveChallenge(today);
+    res.json(active ?? null);
+  });
+  app.post("/api/challenges", async (req, res) => {
+    try {
+      const p = insertChallengeSchema.parse(req.body);
+      res.json(await storage.createChallenge(p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  app.delete("/api/challenges/:id", async (req, res) => {
+    await storage.deleteChallenge(Number(req.params.id));
     res.json({ ok: true });
   });
 

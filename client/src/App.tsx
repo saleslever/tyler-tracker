@@ -4,15 +4,30 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Dashboard from "@/pages/Dashboard";
+import { Layout } from "@/components/Layout";
+import Overview from "@/pages/Overview";
+import Habits from "@/pages/Habits";
+import Tasks from "@/pages/Tasks";
+import Analytics from "@/pages/Analytics";
+import JournalPage from "@/pages/Journal";
+import Goals from "@/pages/Goals";
+import Challenge from "@/pages/Challenge";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route component={NotFound} />
-    </Switch>
+    <Layout>
+      <Switch>
+        <Route path="/" component={Overview} />
+        <Route path="/habits" component={Habits} />
+        <Route path="/tasks" component={Tasks} />
+        <Route path="/analytics" component={Analytics} />
+        <Route path="/journal" component={JournalPage} />
+        <Route path="/goals" component={Goals} />
+        <Route path="/challenge" component={Challenge} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
   );
 }
 

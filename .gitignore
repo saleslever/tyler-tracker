@@ -14,3 +14,10 @@ data.db-journal
 
 *.log
 .DS_Store
+qa_*.png
+
+
+# Generated screenshots
+final_*.png
+generated_*.png
+
