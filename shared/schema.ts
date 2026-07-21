@@ -14,6 +14,8 @@ export const dailyLogs = pgTable("daily_logs", {
   fastingHours: doublePrecision("fasting_hours"),
   weight: doublePrecision("weight"),
   sleepScore: integer("sleep_score"),
+  sleepHours: doublePrecision("sleep_hours"),
+  restingHeartRate: integer("resting_heart_rate"),
   steps: integer("steps"),
   water: integer("water").notNull().default(0),
   vitamins: integer("vitamins").notNull().default(0),

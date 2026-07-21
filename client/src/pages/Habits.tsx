@@ -11,7 +11,7 @@ import {
 } from "@/lib/analytics";
 import { useToday } from "@/hooks/useToday";
 import { PageHeader } from "@/components/PageHeader";
-import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2 } from "lucide-react";
+import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2, Moon, Heart, Footprints, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playSound, useMuteState, haptic } from "@/hooks/useSound";
 
@@ -421,6 +421,9 @@ export default function Habits() {
         />
       </div>
 
+      {/* Health metrics from Oura / Apple Health */}
+      <HealthCard log={viewLog} />
+
       <div className="card-lux px-6">
         {HABITS.map((h) => {
           const stats = habitStats.get(h.key)!;
@@ -467,4 +470,115 @@ function wasNumericHit(habit: HabitDef, raw: any): boolean {
   if (Number.isNaN(v)) return false;
   if (habit.goalDirection === "lte") return v <= habit.goal;
   return v >= habit.goal;
+}
+
+/**
+ * HealthCard — surfaces Oura data pulled via Apple Health.
+ *
+ * Renders four tiles for the selected day: sleep hours, sleep score,
+ * resting HR, steps. Empty tiles show "—" so the layout stays intentional
+ * before the first sync. Values light up gold once they land.
+ */
+function HealthCard({ log }: { log?: DailyLog }) {
+  const sh = log?.sleepHours ?? null;
+  const ss = log?.sleepScore ?? null;
+  const rhr = log?.restingHeartRate ?? null;
+  const steps = log?.steps ?? null;
+  const anyData = sh != null || ss != null || rhr != null || steps != null;
+
+  return (
+    <div className="mb-8 rounded-sm border border-[#2a2a2a] bg-[#0a0908] p-5" data-testid="health-card">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 opacity-70" />
+          <div className="microlabel">Body Signals</div>
+        </div>
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+          {anyData ? "Oura · Apple Health" : "Sync from iPhone to populate"}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <HealthTile
+          icon={<Moon className="w-4 h-4" />}
+          label="Sleep"
+          value={sh != null ? formatHours(sh) : "—"}
+          accent={sh != null}
+          testId="tile-sleep-hours"
+        />
+        <HealthTile
+          icon={<Moon className="w-4 h-4" />}
+          label="Sleep Score"
+          value={ss != null ? String(ss) : "—"}
+          unit={ss != null ? "/100" : undefined}
+          accent={ss != null}
+          testId="tile-sleep-score"
+        />
+        <HealthTile
+          icon={<Heart className="w-4 h-4" />}
+          label="Resting HR"
+          value={rhr != null ? String(rhr) : "—"}
+          unit={rhr != null ? "bpm" : undefined}
+          accent={rhr != null}
+          testId="tile-resting-hr"
+        />
+        <HealthTile
+          icon={<Footprints className="w-4 h-4" />}
+          label="Steps"
+          value={steps != null ? steps.toLocaleString() : "—"}
+          accent={steps != null}
+          testId="tile-steps"
+        />
+      </div>
+    </div>
+  );
+}
+
+function HealthTile({
+  icon,
+  label,
+  value,
+  unit,
+  accent,
+  testId,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  unit?: string;
+  accent: boolean;
+  testId: string;
+}) {
+  return (
+    <div
+      className="rounded-sm border border-[#2a2a2a] bg-[#0a0908] px-4 py-3"
+      data-testid={testId}
+    >
+      <div className="flex items-center gap-1.5 opacity-70">
+        {icon}
+        <div className="microlabel">{label}</div>
+      </div>
+      <div className="mt-1.5 flex items-baseline gap-1.5">
+        <div
+          className="num-display text-2xl leading-none"
+          style={{ color: accent ? "#e0b74f" : "#4a4a4a" }}
+        >
+          {value}
+        </div>
+        {unit && (
+          <div
+            className="text-[10px] uppercase tracking-[0.2em] opacity-60"
+            style={{ fontFamily: "'Inter', sans-serif" }}
+          >
+            {unit}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatHours(h: number): string {
+  const hours = Math.floor(h);
+  const mins = Math.round((h - hours) * 60);
+  return `${hours}h ${mins.toString().padStart(2, "0")}m`;
 }

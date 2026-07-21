@@ -184,6 +184,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // -------- Health sync (Apple Health -> daily_logs) --------
+  // Each reading is one day's worth of Oura/Apple Health data.
+  // Oura wins on conflicts: any provided (non-null) field overwrites existing.
+  const healthReadingS = z.object({
+    date: z.string(),                             // YYYY-MM-DD
+    sleepHours: z.number().optional().nullable(),
+    sleepScore: z.number().int().optional().nullable(),
+    restingHeartRate: z.number().int().optional().nullable(),
+    steps: z.number().int().optional().nullable(),
+  });
+  const healthSyncS = z.object({
+    source: z.string().optional(),                // e.g. "apple_health"
+    readings: z.array(healthReadingS),
+  });
+  app.post("/api/health/sync", async (req, res) => {
+    try {
+      const body = healthSyncS.parse(req.body);
+      const results: { date: string; updated: string[] }[] = [];
+      for (const r of body.readings) {
+        const patch: any = {};
+        const touched: string[] = [];
+        if (r.sleepHours != null)       { patch.sleepHours = r.sleepHours;             touched.push("sleepHours"); }
+        if (r.sleepScore != null)       { patch.sleepScore = r.sleepScore;             touched.push("sleepScore"); }
+        if (r.restingHeartRate != null) { patch.restingHeartRate = r.restingHeartRate; touched.push("restingHeartRate"); }
+        if (r.steps != null)            { patch.steps = r.steps;                       touched.push("steps"); }
+        if (touched.length === 0) continue;
+        await storage.upsertLog(r.date, patch);
+        results.push({ date: r.date, updated: touched });
+      }
+      res.json({
+        ok: true,
+        source: body.source ?? "apple_health",
+        syncedAt: new Date().toISOString(),
+        days: results,
+      });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
   // -------- Mood logs --------
   app.get("/api/moods", async (_req, res) => res.json(await storage.getMoods()));
   const createMoodS = z.object({
