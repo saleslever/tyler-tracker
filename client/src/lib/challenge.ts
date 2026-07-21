@@ -1,12 +1,20 @@
 import type { DailyLog, Challenge } from "@shared/schema";
 import { HABITS, habitHit, addDays, type BoolHabitKey, type NumHabitKey } from "./analytics";
 
-type HabitKey = BoolHabitKey | NumHabitKey;
+export type HabitKey = BoolHabitKey | NumHabitKey;
 
 /**
  * Challenge helpers — pure functions, no side effects.
- * A challenge is a range of days [startDate, endDate] with a required set
- * of habit keys. A "perfect day" is one where every required habit is hit.
+ *
+ * Rules:
+ *   requiredDaily: habits that MUST be hit every single day
+ *   requiredWeekly: { habitKey: N } — habit must be hit N days out of 7 (Mon–Sun)
+ *   optionalHabits: shown on checklist, do not affect perfect-day math
+ *   cheatDaysPerWeek: allowed "unperfect" days per Mon–Sun week (manually tapped)
+ *
+ * A "perfect day" = every requiredDaily habit is hit (or you tapped Cheat Day
+ * and haven't used up your cheat allowance for this week).
+ * A week is "on track" if every requiredWeekly count is met by Sunday.
  */
 
 export function daysBetween(a: string, b: string): number {
@@ -28,20 +36,43 @@ export function dayNumber(challenge: Challenge, dateStr: string): number {
   return daysBetween(challenge.startDate, dateStr) + 1;
 }
 
-export function requiredHabits(challenge: Challenge): HabitKey[] {
+export function requiredDailyHabits(challenge: Challenge): HabitKey[] {
   try {
-    const keys = JSON.parse(challenge.habitKeys) as HabitKey[];
+    const keys = JSON.parse(challenge.requiredDaily) as HabitKey[];
     return keys.filter((k) => HABITS.some((h) => h.key === k));
   } catch {
     return [];
   }
 }
 
-export function isPerfectDay(
+export function requiredWeeklyHabits(challenge: Challenge): Record<HabitKey, number> {
+  try {
+    const obj = JSON.parse(challenge.requiredWeekly) as Record<string, number>;
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (HABITS.some((h) => h.key === k)) out[k] = v;
+    }
+    return out as Record<HabitKey, number>;
+  } catch {
+    return {} as Record<HabitKey, number>;
+  }
+}
+
+export function optionalHabits(challenge: Challenge): HabitKey[] {
+  try {
+    const keys = JSON.parse(challenge.optionalHabits) as HabitKey[];
+    return keys.filter((k) => HABITS.some((h) => h.key === k));
+  } catch {
+    return [];
+  }
+}
+
+/** Was every required-daily habit hit? */
+export function hitAllDailyRequired(
   log: DailyLog | undefined,
   challenge: Challenge,
 ): boolean {
-  const keys = requiredHabits(challenge);
+  const keys = requiredDailyHabits(challenge);
   if (!keys.length) return false;
   return keys.every((k) => {
     const h = HABITS.find((x) => x.key === k)!;
@@ -49,11 +80,28 @@ export function isPerfectDay(
   });
 }
 
+/**
+ * A day counts as "perfect" if:
+ *   - every requiredDaily habit was hit, OR
+ *   - the day was tapped as a Cheat Day (log.cheatDay === 1)
+ */
+export function isPerfectDay(
+  log: DailyLog | undefined,
+  challenge: Challenge,
+): boolean {
+  if (!log) return false;
+  if (log.cheatDay === 1) return true;
+  return hitAllDailyRequired(log, challenge);
+}
+
+/** Fraction 0..1 of daily-required habits hit on a day. Cheat day counts as 1.0 */
 export function dayScoreForChallenge(
   log: DailyLog | undefined,
   challenge: Challenge,
 ): number {
-  const keys = requiredHabits(challenge);
+  if (!log) return 0;
+  if (log.cheatDay === 1) return 1;
+  const keys = requiredDailyHabits(challenge);
   if (!keys.length) return 0;
   const hits = keys.filter((k) => {
     const h = HABITS.find((x) => x.key === k)!;
@@ -62,20 +110,58 @@ export function dayScoreForChallenge(
   return hits / keys.length;
 }
 
+// ---- Week utilities (Mon = start) --------------------------------------
+
+/** Returns YYYY-MM-DD of the Monday that starts the ISO week containing dateStr. */
+export function weekStart(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const day = dt.getDay(); // 0 = Sun, 1 = Mon, ... 6 = Sat
+  const offset = day === 0 ? -6 : 1 - day; // shift back to Monday
+  dt.setDate(dt.getDate() + offset);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** All challenge days that fall in the same Mon–Sun week as `dateStr`. */
+export function weekDaysInChallenge(challenge: Challenge, dateStr: string): string[] {
+  const start = weekStart(dateStr);
+  const out: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i);
+    if (isDayInChallenge(challenge, d)) out.push(d);
+  }
+  return out;
+}
+
+// ---- Rollup ------------------------------------------------------------
+
+export interface WeeklyProgress {
+  weekStart: string;
+  habitCounts: Record<HabitKey, { hit: number; required: number }>;
+  cheatsUsed: number;
+  cheatsAllowed: number;
+}
+
 export interface ChallengeRollup {
   today: string;
-  currentDay: number;      // 1..durationDays (0 if not started, >duration if finished)
-  totalDays: number;       // challenge.durationDays
-  daysElapsed: number;     // days including today, capped to totalDays (0 pre-start)
-  daysRemaining: number;   // totalDays - daysElapsed, floored at 0
-  perfectDays: number;     // count of perfect days so far
-  currentPerfectStreak: number; // consecutive perfect days ending today (or yesterday if today unlogged)
+  currentDay: number;
+  totalDays: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  perfectDays: number;
+  currentPerfectStreak: number;
   bestPerfectStreak: number;
-  pct: number;             // daysElapsed / totalDays
-  perfectPct: number;      // perfectDays / daysElapsed (0 if none elapsed)
+  pct: number;
+  perfectPct: number;
   status: "upcoming" | "active" | "complete";
   todayLog?: DailyLog;
   todayPerfect: boolean;
+  todayIsCheat: boolean;
+  todayAllDailyHit: boolean;
+  thisWeek: WeeklyProgress;
 }
 
 export function rollupChallenge(
@@ -115,16 +201,13 @@ export function rollupChallenge(
     }
   }
 
-  // Current streak ending today: if today is unlogged/imperfect, fall back
-  // to the streak ending yesterday so you don't "lose" your streak before
-  // you've had a chance to check in.
+  // Current streak: if today isn't perfect yet, fall back to yesterday.
   let currentPerfectStreak = curStreak;
   if (
     status === "active" &&
     perfectByDate.length > 0 &&
     !perfectByDate[perfectByDate.length - 1]
   ) {
-    // count back from second-to-last
     let s = 0;
     for (let i = perfectByDate.length - 2; i >= 0; i--) {
       if (perfectByDate[i]) s++;
@@ -134,7 +217,28 @@ export function rollupChallenge(
   }
 
   const todayLog = logsByDate.get(today);
-  const todayPerfect = status === "active" && isPerfectDay(todayLog, challenge);
+  const todayIsCheat = todayLog?.cheatDay === 1;
+  const todayAllDailyHit = hitAllDailyRequired(todayLog, challenge);
+  const todayPerfect =
+    status === "active" && (todayIsCheat || todayAllDailyHit);
+
+  // Weekly rollup for the current week (clamped to challenge range).
+  const weekly = requiredWeeklyHabits(challenge);
+  const weekDays = weekDaysInChallenge(challenge, today);
+  const habitCounts: Record<string, { hit: number; required: number }> = {};
+  for (const [key, required] of Object.entries(weekly)) {
+    const h = HABITS.find((x) => x.key === key);
+    if (!h) continue;
+    let hit = 0;
+    for (const d of weekDays) {
+      if (habitHit(logsByDate.get(d), h)) hit++;
+    }
+    habitCounts[key] = { hit, required };
+  }
+  let cheatsUsed = 0;
+  for (const d of weekDays) {
+    if (logsByDate.get(d)?.cheatDay === 1) cheatsUsed++;
+  }
 
   return {
     today,
@@ -150,5 +254,13 @@ export function rollupChallenge(
     status,
     todayLog,
     todayPerfect,
+    todayIsCheat,
+    todayAllDailyHit,
+    thisWeek: {
+      weekStart: weekStart(today),
+      habitCounts: habitCounts as Record<HabitKey, { hit: number; required: number }>,
+      cheatsUsed,
+      cheatsAllowed: challenge.cheatDaysPerWeek,
+    },
   };
 }

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, doublePrecision, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -21,6 +21,8 @@ export const dailyLogs = pgTable("daily_logs", {
   noAlcohol: integer("no_alcohol").notNull().default(0),
   noEnergyDrinks: integer("no_energy_drinks").notNull().default(0),
   workout: integer("workout").notNull().default(0),
+  lowCarb: integer("low_carb").notNull().default(0),
+  cheatDay: integer("cheat_day").notNull().default(0),
 });
 export const insertDailyLogSchema = createInsertSchema(dailyLogs).omit({ id: true });
 export type InsertDailyLog = z.infer<typeof insertDailyLogSchema>;
@@ -74,8 +76,12 @@ export type Goal = typeof goals.$inferSelect;
 
 /**
  * Challenge — a named block of days with a required set of habits.
- * Multiple challenges can exist; the "current" one is whichever is active
- * on today's date.
+ *
+ * Rules (encoded in JSON columns):
+ *   requiredDaily: habits that must be hit every day (no cheat allowed)
+ *   requiredWeekly: { habitKey: N } — habit must be hit N days per calendar week
+ *   optionalHabits: shown on the checklist but do not affect perfect-day math
+ *   cheatDaysPerWeek: how many missed days per week don't break the streak
  */
 export const challenges = pgTable("challenges", {
   id: serial("id").primaryKey(),
@@ -83,8 +89,10 @@ export const challenges = pgTable("challenges", {
   startDate: text("start_date").notNull(), // YYYY-MM-DD
   endDate: text("end_date").notNull(),     // YYYY-MM-DD (inclusive)
   durationDays: integer("duration_days").notNull(),
-  // JSON string array of habit keys required to make a "perfect day"
-  habitKeys: text("habit_keys").notNull(),
+  requiredDaily: text("required_daily").notNull(),   // JSON string array of habit keys
+  requiredWeekly: text("required_weekly").notNull(), // JSON string { habitKey: count }
+  optionalHabits: text("optional_habits").notNull().default("[]"), // JSON string array
+  cheatDaysPerWeek: integer("cheat_days_per_week").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
 export const insertChallengeSchema = createInsertSchema(challenges).omit({

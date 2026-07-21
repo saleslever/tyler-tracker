@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import type { DailyLog, Challenge } from "@shared/schema";
 import { useToday } from "@/hooks/useToday";
-import { rollupChallenge, requiredHabits } from "@/lib/challenge";
-import { HABITS, addDays } from "@/lib/analytics";
+import { rollupChallenge, dayScoreForChallenge } from "@/lib/challenge";
+import { addDays } from "@/lib/analytics";
 import { Trophy, ArrowRight, Flame } from "lucide-react";
 
 /**
@@ -42,30 +42,25 @@ export function ChallengeCard() {
   const strip = useMemo(() => {
     if (!challenge || !rollup) return [];
     const logsByDate = new Map(logs.map((l) => [l.date, l] as const));
-    const keys = requiredHabits(challenge);
     const total = challenge.durationDays;
     const start = Math.max(0, rollup.daysElapsed - 14);
     const end = Math.min(total, start + 14);
-    const cells: { date: string; day: number; state: "perfect" | "partial" | "miss" | "future" }[] = [];
+    type CellState = "perfect" | "cheat" | "partial" | "miss" | "future";
+    const cells: { date: string; day: number; state: CellState }[] = [];
     for (let i = start; i < end; i++) {
       const d = addDays(challenge.startDate, i);
       const log = logsByDate.get(d);
-      let state: "perfect" | "partial" | "miss" | "future" = "future";
-      if (i < rollup.daysElapsed - (rollup.status === "active" ? 1 : 0)) {
-        // Past day, fully in the record
-        const hits = keys.filter((k) => {
-          const h = HABITS.find((x) => x.key === k)!;
-          if (!log) return false;
-          if (h.kind === "bool") return (log as any)[k] === 1;
-          const v = (log as any)[k];
-          return v != null && (h.compare === "gte" ? v >= h.target : v <= h.target);
-        }).length;
-        if (hits === keys.length) state = "perfect";
-        else if (hits > 0) state = "partial";
-        else state = "miss";
-      } else if (i === rollup.daysElapsed - 1) {
-        // Today
-        state = rollup.todayPerfect ? "perfect" : (log ? "partial" : "future");
+      let state: CellState = "future";
+      const isPastOrToday = i <= rollup.daysElapsed - 1;
+      if (isPastOrToday) {
+        if (log?.cheatDay === 1) {
+          state = "cheat";
+        } else {
+          const score = dayScoreForChallenge(log, challenge);
+          if (score === 1) state = "perfect";
+          else if (score > 0) state = "partial";
+          else state = "miss";
+        }
       }
       cells.push({ date: d, day: i + 1, state });
     }
@@ -184,6 +179,7 @@ export function ChallengeCard() {
             {strip.map((c) => {
               const bg =
                 c.state === "perfect" ? "bg-emerald-400"
+                : c.state === "cheat" ? "bg-sky-400/70"
                 : c.state === "partial" ? "bg-amber-400/70"
                 : c.state === "miss" ? "bg-red-500/60"
                 : "bg-muted-foreground/15";

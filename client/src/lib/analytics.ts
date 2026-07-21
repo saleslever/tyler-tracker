@@ -6,7 +6,8 @@ export type BoolHabitKey =
   | "morningDrink"
   | "noAlcohol"
   | "noEnergyDrinks"
-  | "workout";
+  | "workout"
+  | "lowCarb";
 
 export type NumHabitKey = "fastingHours" | "weight" | "sleepScore" | "steps";
 
@@ -22,13 +23,15 @@ export interface HabitDef {
 }
 
 // Order matters — this is the display order in the UI.
+// Challenge-required-daily habits are listed first.
 export const HABITS: HabitDef[] = [
+  { key: "lowCarb", label: "Low Carb", kind: "bool", hint: "< 50g net", emoji: "🥩" },
   { key: "fastingHours", label: "Fasting", kind: "num", goal: 16, goalDirection: "gte", unit: "hrs", emoji: "⏱" },
+  { key: "vitamins", label: "Vitamins & Creatine", kind: "bool", emoji: "💊" },
   { key: "water", label: "1 Gallon Water", kind: "bool", emoji: "💧" },
-  { key: "vitamins", label: "Vitamins", kind: "bool", emoji: "💊" },
-  { key: "morningDrink", label: "Morning Drink", kind: "bool", emoji: "🥤" },
-  { key: "workout", label: "Workout", kind: "bool", hint: "4x / week", emoji: "🏋" },
   { key: "steps", label: "Steps", kind: "num", goal: 10000, goalDirection: "gte", unit: "", emoji: "👟" },
+  { key: "workout", label: "Lift Weights", kind: "bool", hint: "4x / week", emoji: "🏋" },
+  { key: "morningDrink", label: "Morning Drink", kind: "bool", emoji: "🥤" },
   { key: "sleepScore", label: "Sleep Score", kind: "num", goal: 90, goalDirection: "gte", unit: "", emoji: "🌙" },
   { key: "weight", label: "Weight", kind: "num", goal: 200, goalDirection: "lte", unit: "lb", emoji: "⚖" },
   { key: "noAlcohol", label: "No Alcohol", kind: "bool", emoji: "🚫🍺" },

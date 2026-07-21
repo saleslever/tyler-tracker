@@ -49,8 +49,12 @@ export async function ensureSchema() {
       morning_drink INTEGER NOT NULL DEFAULT 0,
       no_alcohol INTEGER NOT NULL DEFAULT 0,
       no_energy_drinks INTEGER NOT NULL DEFAULT 0,
-      workout INTEGER NOT NULL DEFAULT 0
+      workout INTEGER NOT NULL DEFAULT 0,
+      low_carb INTEGER NOT NULL DEFAULT 0,
+      cheat_day INTEGER NOT NULL DEFAULT 0
     );
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS low_carb INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS cheat_day INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS tasks (
       id SERIAL PRIMARY KEY,
@@ -88,9 +92,17 @@ export async function ensureSchema() {
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
       duration_days INTEGER NOT NULL,
-      habit_keys TEXT NOT NULL,
+      required_daily TEXT NOT NULL DEFAULT '[]',
+      required_weekly TEXT NOT NULL DEFAULT '{}',
+      optional_habits TEXT NOT NULL DEFAULT '[]',
+      cheat_days_per_week INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS required_daily TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS required_weekly TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS optional_habits TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS cheat_days_per_week INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE challenges DROP COLUMN IF EXISTS habit_keys;
   `);
 }
 
