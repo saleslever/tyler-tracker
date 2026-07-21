@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, Challenge } from "@shared/schema";
+import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, Challenge, MoodLog } from "@shared/schema";
 import { useToday } from "@/hooks/useToday";
 import {
   HABITS,
@@ -20,7 +20,7 @@ import { XPBar } from "@/components/XPBar";
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, ArrowDownRight, Flame, CheckCircle2, Target as TargetIcon, Swords, Trophy, Award } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Flame, CheckCircle2, Target as TargetIcon, Swords, Trophy, Award, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { SobrietyCard } from "@/components/SobrietyCard";
@@ -57,6 +57,7 @@ export default function Overview() {
   const { data: records = [] } = useQuery<Record_[]>({ queryKey: ["/api/records"] });
   const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
   const { data: completions = [] } = useQuery<QuestCompletion[]>({ queryKey: ["/api/quest-completions"] });
+  const { data: moods = [] } = useQuery<MoodLog[]>({ queryKey: ["/api/moods"] });
 
   const [rangeIdx, setRangeIdx] = useState(1);
   const range = RANGES[rangeIdx];
@@ -233,6 +234,9 @@ export default function Overview() {
       {/* ==== CHALLENGE ==== */}
       <ChallengeCard />
 
+      {/* ==== MOOD ==== */}
+      <MoodMini moods={moods} />
+
       {/* ==== SOBRIETY ==== */}
       <SobrietyCard />
 
@@ -377,6 +381,124 @@ function MiniStat({ label, value, sub, tone, icon }: { label: string; value: Rea
       </div>
       <div className="mt-1 num-display text-2xl" style={{ color: tone }}>{value}</div>
       {sub && <div className="text-[10px] opacity-65 mt-0.5" style={{ fontFamily: "'Inter', sans-serif" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function MoodMini({ moods }: { moods: MoodLog[] }) {
+  const sorted = [...moods].sort(
+    (a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime(),
+  );
+  const latest = sorted[0];
+  const week = moods.filter(
+    (m) => Date.now() - new Date(m.loggedAt).getTime() < 7 * 24 * 60 * 60 * 1000,
+  );
+  const weekAvg = week.length
+    ? week.reduce((a, b) => a + b.value, 0) / week.length
+    : null;
+  const prev = sorted[1];
+  const delta = latest && prev ? latest.value - prev.value : 0;
+
+  const color = latest
+    ? latest.value <= 3
+      ? "#c94848"
+      : latest.value <= 5
+        ? "#8a8578"
+        : latest.value <= 7
+          ? "#c9995a"
+          : "#e0b74f"
+    : "#4a4a4a";
+
+  const label = latest
+    ? latest.value <= 2
+      ? "Rock bottom"
+      : latest.value <= 4
+        ? "Low"
+        : latest.value <= 6
+          ? "Steady"
+          : latest.value <= 8
+            ? "Strong"
+            : "Peak"
+    : "No check-ins yet";
+
+  return (
+    <div className="mt-8 rounded-sm border border-[#2a2a2a] bg-[#0a0908] p-5" data-testid="mood-mini">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <HeartPulse className="h-4 w-4 opacity-70" />
+          <div className="microlabel">Mood</div>
+        </div>
+        <Link
+          href="/mood"
+          className="text-xs tracking-widest uppercase text-muted-foreground hover:text-foreground"
+        >
+          Log &amp; chart →
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 items-center">
+        <div className="flex items-center gap-4">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-sm border-2 num-display text-3xl"
+            style={{ borderColor: color, color, background: "#0a0908" }}
+          >
+            {latest ? latest.value : "—"}
+          </div>
+          <div className="min-w-0">
+            <div
+              className="text-sm"
+              style={{ color, fontFamily: "'Inter', sans-serif" }}
+            >
+              {label}
+            </div>
+            {latest && (
+              <div className="text-[11px] opacity-60" style={{ fontFamily: "'Inter', sans-serif" }}>
+                {new Date(latest.loggedAt).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </div>
+            )}
+            {latest && prev && delta !== 0 && (
+              <div
+                className="mt-1 flex items-center gap-1 text-[11px]"
+                style={{
+                  color: delta > 0 ? "#7fb069" : "#c94848",
+                  fontFamily: "'Inter', sans-serif",
+                }}
+              >
+                {delta > 0 ? (
+                  <ArrowUpRight className="h-3 w-3" />
+                ) : (
+                  <ArrowDownRight className="h-3 w-3" />
+                )}
+                {delta > 0 ? "+" : ""}
+                {delta} vs. previous
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="text-center">
+          <div className="microlabel">7-Day Avg</div>
+          <div className="mt-1 num-display text-2xl" style={{ color: "#e0b74f" }}>
+            {weekAvg ? weekAvg.toFixed(1) : "—"}
+          </div>
+          <div className="text-[10px] opacity-60 mt-0.5" style={{ fontFamily: "'Inter', sans-serif" }}>
+            {week.length} check-in{week.length === 1 ? "" : "s"}
+          </div>
+        </div>
+
+        <div className="text-center">
+          <div className="microlabel">All Time</div>
+          <div className="mt-1 num-display text-2xl">{moods.length}</div>
+          <div className="text-[10px] opacity-60 mt-0.5" style={{ fontFamily: "'Inter', sans-serif" }}>
+            logged
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

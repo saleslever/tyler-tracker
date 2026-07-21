@@ -184,5 +184,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // -------- Mood logs --------
+  app.get("/api/moods", async (_req, res) => res.json(await storage.getMoods()));
+  const createMoodS = z.object({
+    value: z.number().int().min(1).max(10),
+    note: z.string().optional().nullable(),
+    loggedAt: z.string().optional(),
+  });
+  app.post("/api/moods", async (req, res) => {
+    try {
+      const p = createMoodS.parse(req.body);
+      res.json(await storage.createMood({
+        value: p.value,
+        note: p.note ?? null,
+        loggedAt: p.loggedAt ?? new Date().toISOString(),
+      }));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  app.delete("/api/moods/:id", async (req, res) => {
+    try {
+      await storage.deleteMood(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
   return httpServer;
 }

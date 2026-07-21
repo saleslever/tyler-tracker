@@ -1,4 +1,4 @@
-import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals, moodLogs } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
@@ -7,6 +7,7 @@ import type {
   Quest, InsertQuest, QuestCompletion,
   Record_, InsertRecord,
   BossSeal, InsertBossSeal,
+  MoodLog, InsertMoodLog,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -187,6 +188,14 @@ export async function ensureSchema() {
     ALTER TABLE quests ADD COLUMN IF NOT EXISTS family TEXT;
     ALTER TABLE quests ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1;
 
+    CREATE TABLE IF NOT EXISTS mood_logs (
+      id SERIAL PRIMARY KEY,
+      value INTEGER NOT NULL,
+      note TEXT,
+      logged_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mood_logs_logged_at ON mood_logs(logged_at);
+
     CREATE TABLE IF NOT EXISTS quest_completions (
       id SERIAL PRIMARY KEY,
       quest_key TEXT NOT NULL,
@@ -343,6 +352,10 @@ export interface IStorage {
   // Boss seals
   getBossSeals(): Promise<BossSeal[]>;
   createBossSeal(seal: InsertBossSeal): Promise<BossSeal>;
+  // Mood logs
+  getMoods(): Promise<MoodLog[]>;
+  createMood(m: InsertMoodLog): Promise<MoodLog>;
+  deleteMood(id: number): Promise<void>;
   // Reset
   resetAll(): Promise<void>;
 }
@@ -600,6 +613,18 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
+  // -------- Mood logs --------
+  async getMoods() {
+    return db.select().from(moodLogs).orderBy(desc(moodLogs.loggedAt));
+  }
+  async createMood(m: InsertMoodLog) {
+    const rows = await db.insert(moodLogs).values({ ...m }).returning();
+    return rows[0];
+  }
+  async deleteMood(id: number) {
+    await db.delete(moodLogs).where(eq(moodLogs.id, id));
+  }
+
   async resetAll() {
     const now = new Date().toISOString();
     await db.delete(dailyLogs);
@@ -608,6 +633,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(goals);
     await db.delete(challenges);
     await db.delete(bossSeals);
+    await db.delete(moodLogs);
     // Nuke quest history so the Trophy Hall is clean
     await db.delete(questCompletions);
     // Drop every quest, then reseed the tier-1 originals so the app never

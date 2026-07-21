@@ -17,6 +17,7 @@ import {
   VolumeX,
   Swords,
   Crown,
+  HeartPulse,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
@@ -39,6 +40,7 @@ const NAV = [
       { href: "/habits", label: "Habits", icon: CheckSquare },
       { href: "/challenge", label: "Challenge", icon: Trophy },
       { href: "/quests", label: "Quests", icon: Swords },
+      { href: "/mood", label: "Mood", icon: HeartPulse },
       { href: "/tasks", label: "Tasks", icon: ListTodo },
       { href: "/journal", label: "Journal", icon: BookOpen },
     ],

@@ -240,3 +240,21 @@ export const insertBossSealSchema = createInsertSchema(bossSeals).omit({
 });
 export type InsertBossSeal = z.infer<typeof insertBossSealSchema>;
 export type BossSeal = typeof bossSeals.$inferSelect;
+
+/**
+ * Mood logs — timestamped 1-10 mood check-ins.
+ *   1  = depressed / rock bottom
+ *   10 = best energy, best I've ever felt
+ *
+ * Every tap of a mood button inserts a new row so the rolling chart
+ * shows real ups and downs across the day / week / month.
+ */
+export const moodLogs = pgTable("mood_logs", {
+  id: serial("id").primaryKey(),
+  value: integer("value").notNull(),   // 1..10
+  note: text("note"),                  // optional context
+  loggedAt: text("logged_at").notNull(), // ISO timestamp
+});
+export const insertMoodLogSchema = createInsertSchema(moodLogs).omit({ id: true });
+export type InsertMoodLog = z.infer<typeof insertMoodLogSchema>;
+export type MoodLog = typeof moodLogs.$inferSelect;
