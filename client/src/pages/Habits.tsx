@@ -13,7 +13,7 @@ import { useToday } from "@/hooks/useToday";
 import { PageHeader } from "@/components/PageHeader";
 import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { playSound, useMuteState } from "@/hooks/useSound";
+import { playSound, useMuteState, haptic } from "@/hooks/useSound";
 
 // Memoized so unrelated state changes (e.g. typing in another row) don't
 // re-render every row.
@@ -28,6 +28,16 @@ const HabitRow = memo(function HabitRow({
   onToggle: () => void;
   onNum: (v: number | null) => void;
 }) {
+  // Per-row visual pulse when the habit gets checked. Reset key-triggered.
+  const [pulseKey, setPulseKey] = useState(0);
+  const prevHitRef = useRef(hit);
+  useEffect(() => {
+    if (!prevHitRef.current && hit) {
+      // Only pulse on the 0 → 1 transition (a fresh check)
+      setPulseKey(k => k + 1);
+    }
+    prevHitRef.current = hit;
+  }, [hit]);
   // Local input state so typing feels instant; parent only sees debounced value.
   const [localValue, setLocalValue] = useState<string>(
     rawValue == null ? "" : String(rawValue)
@@ -77,19 +87,39 @@ const HabitRow = memo(function HabitRow({
       data-testid={`habit-row-${habit.key}`}
     >
       {habit.kind === "bool" ? (
-        <button
-          onClick={onToggle}
-          className={cn(
-            "shrink-0 w-9 h-9 rounded flex items-center justify-center border transition-all",
-            hit
-              ? "bg-foreground text-background border-foreground"
-              : "bg-transparent border-border hover:border-foreground/50"
+        <div className="relative shrink-0">
+          <button
+            onClick={onToggle}
+            className={cn(
+              "relative shrink-0 w-9 h-9 rounded flex items-center justify-center border transition-all active:scale-90",
+              hit
+                ? "bg-foreground text-background border-foreground shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
+                : "bg-transparent border-border hover:border-foreground/50"
+            )}
+            data-testid={`toggle-${habit.key}`}
+            aria-label={`Toggle ${habit.label}`}
+          >
+            {hit && <Check className="w-4 h-4" strokeWidth={3} />}
+          </button>
+          {/* Pulse ring — fires on 0→1 transition, animates outward and fades */}
+          {pulseKey > 0 && (
+            <span
+              key={`pulse-${pulseKey}`}
+              className="pointer-events-none absolute inset-0 rounded ring-2 ring-amber-400/70 animate-habit-pulse"
+              aria-hidden="true"
+            />
           )}
-          data-testid={`toggle-${habit.key}`}
-          aria-label={`Toggle ${habit.label}`}
-        >
-          {hit && <Check className="w-4 h-4" strokeWidth={3} />}
-        </button>
+          {/* +1 XP floater */}
+          {pulseKey > 0 && (
+            <span
+              key={`xp-${pulseKey}`}
+              className="pointer-events-none absolute left-1/2 -top-1 -translate-x-1/2 text-[10px] font-semibold tracking-wider text-amber-300 animate-habit-xp"
+              aria-hidden="true"
+            >
+              +1
+            </span>
+          )}
+        </div>
       ) : (
         <div className="shrink-0 w-9 h-9 rounded flex items-center justify-center border border-border text-base">
           {habit.emoji}
@@ -275,17 +305,30 @@ export default function Habits() {
     prevScoreRef.current = score;
   }, [score, isToday]);
 
-  // Helper: fire the check chime when a habit transitions to hit.
+  // Helper: fire the tick + haptic when a habit transitions to hit,
+  // or the uncheck sound if it transitions the other way.
   function playCheckIfNewlyHit(habit: HabitDef, prevRaw: any, nextRaw: any) {
     if (habit.kind === "bool") {
-      if (prevRaw !== 1 && nextRaw === 1) playSound("check");
+      if (prevRaw !== 1 && nextRaw === 1) {
+        playSound("tick");
+        haptic("tick");
+      } else if (prevRaw === 1 && nextRaw !== 1) {
+        playSound("uncheck");
+        haptic("warning");
+      }
       return;
     }
     // numeric habit — evaluate hit against goal
-    if (habit.goal == null || nextRaw == null || nextRaw === "") return;
+    if (habit.goal == null) return;
     const wasHit = wasNumericHit(habit, prevRaw);
     const nowHit = wasNumericHit(habit, nextRaw);
-    if (!wasHit && nowHit) playSound("check");
+    if (!wasHit && nowHit) {
+      playSound("tick");
+      haptic("tick");
+    } else if (wasHit && !nowHit) {
+      playSound("uncheck");
+      haptic("warning");
+    }
   }
 
   return (

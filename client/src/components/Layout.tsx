@@ -15,7 +15,13 @@ import {
   Trophy,
   Volume2,
   VolumeX,
+  Swords,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
+import { RankUpCeremony } from "./RankUpCeremony";
+import { DailyBossVictory } from "./DailyBossVictory";
+import { NewRecordCelebration } from "./NewRecordCelebration";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isMuted, setMuted } from "@/hooks/useSound";
@@ -30,6 +36,7 @@ const NAV = [
     items: [
       { href: "/habits", label: "Habits", icon: CheckSquare },
       { href: "/challenge", label: "Challenge", icon: Trophy },
+      { href: "/quests", label: "Quests", icon: Swords },
       { href: "/tasks", label: "Tasks", icon: ListTodo },
       { href: "/journal", label: "Journal", icon: BookOpen },
     ],
@@ -146,6 +153,9 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main */}
       <main className="flex-1 min-w-0 md:pt-0 pt-14">{children}</main>
 
+      {/* Global ceremonies — mounted once, listen for events */}
+      <GlobalCeremonies />
+
       {/* Reset confirmation modal */}
       {resetOpen && (
         <div
@@ -189,5 +199,18 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+function GlobalCeremonies() {
+  const { data: logs = [] } = useQuery<DailyLog[]>({ queryKey: ["/api/logs"] });
+  const { data: seals = [] } = useQuery<BossSeal[]>({ queryKey: ["/api/boss-seals"] });
+  const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
+  return (
+    <>
+      <RankUpCeremony />
+      <DailyBossVictory logs={logs} challenge={challenge} />
+      <NewRecordCelebration logs={logs} seals={seals} />
+    </>
   );
 }

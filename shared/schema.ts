@@ -135,3 +135,83 @@ export const insertRitualSchema = createInsertSchema(rituals).omit({
 });
 export type InsertRitual = z.infer<typeof insertRitualSchema>;
 export type Ritual = typeof rituals.$inferSelect;
+
+/**
+ * Quests — concurrent side objectives that give the game brain bite-sized targets.
+ *
+ * Each quest has:
+ *   key: stable identifier ("iron_week", "the_forge", ...)
+ *   title, subtitle, motto, icon (emoji or lucide name), tone ("iron"|"gold"|"blood"|"sober"|"forge")
+ *   goal: numeric target (e.g. 7 perfect days)
+ *   metric: which value to track ("perfect_streak", "workouts_week", "sober_days", "no_cheat_days", "habits_hit_week")
+ *   xpReward: XP granted on completion
+ *   claimedAt: null while active, ISO timestamp once claimed
+ *   completedAt: null until goal reached (auto-set by the client-side sync)
+ *   updatedAt: ISO timestamp of last mutation
+ *
+ * Quests are re-claimable — after claimedAt is set, the client resets progress and starts fresh cycle.
+ */
+export const quests = pgTable("quests", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle"),
+  motto: text("motto"),
+  icon: text("icon"),
+  tone: text("tone").notNull().default("iron"),
+  metric: text("metric").notNull(),
+  goal: integer("goal").notNull(),
+  xpReward: integer("xp_reward").notNull().default(100),
+  progress: integer("progress").notNull().default(0),
+  completedAt: text("completed_at"),
+  claimedAt: text("claimed_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+export const insertQuestSchema = createInsertSchema(quests).omit({
+  id: true, updatedAt: true,
+});
+export type InsertQuest = z.infer<typeof insertQuestSchema>;
+export type Quest = typeof quests.$inferSelect;
+
+/**
+ * Personal Records — lifetime bests, auto-updated by the client after every log change.
+ *
+ * key: stable identifier ("best_perfect_streak", "longest_sober", "best_week_xp", ...)
+ * value: numeric record value
+ * label: human display label
+ * unit: "days" | "XP" | "hrs" | etc.
+ * setOnDate: date this record was set (YYYY-MM-DD)
+ * seenAt: null if a NEW record hasn't been acknowledged yet; ISO timestamp once user has seen it
+ */
+export const records = pgTable("records", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  unit: text("unit"),
+  value: integer("value").notNull().default(0),
+  setOnDate: text("set_on_date"),
+  seenAt: text("seen_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+export const insertRecordSchema = createInsertSchema(records).omit({
+  id: true, updatedAt: true,
+});
+export type InsertRecord = z.infer<typeof insertRecordSchema>;
+export type Record_ = typeof records.$inferSelect;
+
+/**
+ * Boss seals — one row per calendar day where Tyler completed all required-daily habits.
+ * Used to prevent re-firing the Daily Boss victory ceremony (once per day).
+ * Also renders as a wax-seal on the challenge grid.
+ */
+export const bossSeals = pgTable("boss_seals", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull().unique(),
+  sealedAt: text("sealed_at").notNull(),
+  xpAwarded: integer("xp_awarded").notNull().default(0),
+});
+export const insertBossSealSchema = createInsertSchema(bossSeals).omit({
+  id: true,
+});
+export type InsertBossSeal = z.infer<typeof insertBossSealSchema>;
+export type BossSeal = typeof bossSeals.$inferSelect;

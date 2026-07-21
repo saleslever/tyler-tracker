@@ -20,7 +20,14 @@ type SoundKey =
   | "sparkle"    // gratitude complete
   | "awaken"     // the morning-alignment cold-open ceremony
   | "shield"     // cheat day used
-  | "flourish";  // Code section read
+  | "flourish"   // Code section read
+  | "tick"       // habit checkbox — bright and immediate
+  | "uncheck"    // habit unchecked — soft, low
+  | "levelUp"    // XP threshold crossed (small)
+  | "rankUp"     // rank ceremony (big brass)
+  | "questDone"  // quest completed
+  | "record"     // new personal record
+  | "bossHorn";  // daily boss victory
 
 const MP3_SOURCES: Partial<Record<SoundKey, string>> = {
   check: checkSfx,
@@ -186,6 +193,121 @@ function playFlourish() {
   playTone({ freq: 392, duration: 1.2, overtones: [1, 1.25, 1.5, 2], gain: 0.18, wave: "sine" });
 }
 
+/** TICK — bright, immediate, dopamine-forward habit check. Two-note upward. */
+function playTick() {
+  // High crisp bell — the "dinnnnk" of a satisfying tap
+  playTone({ freq: 880, duration: 0.28, overtones: [1, 2, 3.2], gain: 0.24, wave: "sine", attack: 0.002, detune: 6 });
+  // Higher tail 40ms later — the sparkle
+  setTimeout(() => {
+    playTone({ freq: 1318.5, duration: 0.22, overtones: [1, 2], gain: 0.14, wave: "triangle", attack: 0.002, detune: 8 });
+  }, 40);
+}
+
+/** UNCHECK — soft, descending, so unchecking still feels tactile without a reward vibe. */
+function playUncheck() {
+  playTone({ freq: 440, duration: 0.18, overtones: [1, 2], gain: 0.12, wave: "sine", attack: 0.002 });
+  setTimeout(() => {
+    playTone({ freq: 293.66, duration: 0.16, overtones: [1, 2], gain: 0.08, wave: "sine", attack: 0.002 });
+  }, 30);
+}
+
+/** LEVEL UP — subtle 3-note rising arpeggio. Fires often, so keep it light. */
+function playLevelUp() {
+  const notes = [523.25, 659.25, 987.77]; // C E B
+  notes.forEach((f, i) => {
+    setTimeout(() => playTone({
+      freq: f,
+      duration: 0.42,
+      overtones: [1, 2, 3],
+      gain: 0.14,
+      wave: "triangle",
+      attack: 0.005,
+    }), i * 55);
+  });
+}
+
+/** RANK UP — massive brass fanfare. Fires rarely. Cinematic. */
+function playRankUp() {
+  // Low brass foundation
+  playTone({ freq: 130.81, duration: 2.6, overtones: [1, 2, 3, 4], gain: 0.28, wave: "sawtooth", attack: 0.02 });
+  // Rising 5th
+  setTimeout(() => playTone({ freq: 196.00, duration: 2.2, overtones: [1, 2, 3], gain: 0.22, wave: "sawtooth" }), 120);
+  // Bright top note
+  setTimeout(() => playTone({ freq: 523.25, duration: 1.8, overtones: [1, 2, 3], gain: 0.18, wave: "triangle" }), 260);
+  // Final flourish
+  setTimeout(() => playTone({ freq: 783.99, duration: 1.4, overtones: [1, 2, 3], gain: 0.16, wave: "triangle" }), 800);
+  setTimeout(() => playTone({ freq: 1046.5, duration: 1.6, overtones: [1, 2], gain: 0.14 }), 1100);
+}
+
+/** QUEST DONE — bright victory stinger, 4-note descending flourish. */
+function playQuestDone() {
+  const notes = [1046.5, 880, 659.25, 523.25];
+  notes.forEach((f, i) => {
+    setTimeout(() => playTone({
+      freq: f,
+      duration: 0.5,
+      overtones: [1, 2, 3],
+      gain: 0.16,
+      wave: "triangle",
+      attack: 0.003,
+    }), i * 90);
+  });
+  // Bell tail
+  setTimeout(() => playTone({ freq: 261.63, duration: 1.6, overtones: [1, 2, 3, 5.4], gain: 0.20 }), 380);
+}
+
+/** RECORD — magical chime, 5 close-packed high notes. */
+function playRecord() {
+  const notes = [1318.5, 1567.98, 1760, 1975.53, 2093];
+  notes.forEach((f, i) => {
+    setTimeout(() => playTone({
+      freq: f,
+      duration: 0.4,
+      overtones: [1, 2],
+      gain: 0.10,
+      wave: "sine",
+      attack: 0.003,
+    }), i * 45);
+  });
+}
+
+/** BOSS HORN — the DAILY BOSS victory. Low horn + gong + rising fifth. */
+function playBossHorn() {
+  // Deep war horn
+  playTone({ freq: 82.41, duration: 2.8, overtones: [1, 2, 3, 4], gain: 0.32, wave: "sawtooth", attack: 0.03 });
+  setTimeout(() => playTone({ freq: 110, duration: 2.4, overtones: [1, 2, 3], gain: 0.24, wave: "sawtooth" }), 100);
+  // Gong hit
+  setTimeout(() => playTone({ freq: 195, duration: 2.4, overtones: [1, 2, 2.76, 5.4], gain: 0.28 }), 400);
+  // Triumphant top
+  setTimeout(() => playTone({ freq: 659.25, duration: 1.8, overtones: [1, 2, 3], gain: 0.18, wave: "triangle" }), 700);
+  setTimeout(() => playTone({ freq: 987.77, duration: 1.6, overtones: [1, 2], gain: 0.14 }), 1100);
+}
+
+/* ============ Haptics ============ */
+// Web Vibration API — works on Android Chrome/Firefox. iOS Safari blocks it silently.
+// We always call it; if the browser rejects, we no-op. This lets Tyler feel his phone
+// buzz when he taps a habit on his iPad or Pixel.
+export type HapticPattern = "tick" | "medium" | "success" | "warning" | "heavy";
+
+const HAPTIC_PATTERNS: Record<HapticPattern, number | number[]> = {
+  tick: 12,               // short tap — habit check
+  medium: 28,             // stronger — quest progress
+  success: [18, 40, 18],  // triple pulse — perfect day / milestone
+  warning: [24, 60, 24],  // uncheck / cheat used
+  heavy: [40, 80, 40, 80, 60], // milestone celebration
+};
+
+export function haptic(pattern: HapticPattern = "tick") {
+  if (muted) return;
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(HAPTIC_PATTERNS[pattern]);
+    }
+  } catch {
+    // No-op
+  }
+}
+
 /* ============ public API ============ */
 export function playSound(key: SoundKey) {
   if (muted) return;
@@ -211,6 +333,13 @@ export function playSound(key: SoundKey) {
       case "awaken": playAwaken(); return;
       case "shield": playShield(); return;
       case "flourish": playFlourish(); return;
+      case "tick": playTick(); return;
+      case "uncheck": playUncheck(); return;
+      case "levelUp": playLevelUp(); return;
+      case "rankUp": playRankUp(); return;
+      case "questDone": playQuestDone(); return;
+      case "record": playRecord(); return;
+      case "bossHorn": playBossHorn(); return;
     }
   } catch {
     // No-op — never let audio break the UI.

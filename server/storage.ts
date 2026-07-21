@@ -1,9 +1,12 @@
-import { dailyLogs, tasks, journal, goals, challenges, rituals } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, records, bossSeals } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
   Challenge, InsertChallenge,
   Ritual, InsertRitual,
+  Quest, InsertQuest,
+  Record_, InsertRecord,
+  BossSeal, InsertBossSeal,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -118,6 +121,41 @@ export async function ensureSchema() {
       items TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS quests (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      motto TEXT,
+      icon TEXT,
+      tone TEXT NOT NULL DEFAULT 'iron',
+      metric TEXT NOT NULL,
+      goal INTEGER NOT NULL,
+      xp_reward INTEGER NOT NULL DEFAULT 100,
+      progress INTEGER NOT NULL DEFAULT 0,
+      completed_at TEXT,
+      claimed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS records (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      unit TEXT,
+      value INTEGER NOT NULL DEFAULT 0,
+      set_on_date TEXT,
+      seen_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS boss_seals (
+      id SERIAL PRIMARY KEY,
+      date TEXT NOT NULL UNIQUE,
+      sealed_at TEXT NOT NULL,
+      xp_awarded INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // Seed default rituals on first boot (only if the table is empty)
@@ -159,6 +197,48 @@ export async function ensureSchema() {
       ],
     );
   }
+
+  // Seed default quests on first boot (only if the table is empty).
+  const q = await pool.query(`SELECT COUNT(*)::int AS n FROM quests`);
+  if (q.rows[0].n === 0) {
+    const now = new Date().toISOString();
+    // 6 seeded quests — designed to always have something in progress.
+    const seed = [
+      { key: "iron_week",   title: "IRON WEEK",        subtitle: "Seven consecutive perfect days.",  motto: "Consistency is a weapon.", icon: "🛡", tone: "iron",  metric: "perfect_streak", goal: 7,   xp: 500 },
+      { key: "the_forge",   title: "THE FORGE",         subtitle: "Four lifts inside seven days.",     motto: "Steel is not born; it is hammered.", icon: "🔨", tone: "forge",  metric: "workouts_week", goal: 4,   xp: 250 },
+      { key: "clarity",     title: "CLARITY",           subtitle: "Thirty consecutive sober days.",     motto: "A clear mind is a sharp blade.", icon: "🌙", tone: "sober",  metric: "sober_streak",  goal: 30,  xp: 1000 },
+      { key: "purity",      title: "PURITY",            subtitle: "Fourteen days without a cheat.",     motto: "Discipline is freedom.", icon: "🤍", tone: "gold",   metric: "no_cheat_streak", goal: 14,  xp: 400 },
+      { key: "ledger_kept", title: "LEDGER KEPT",       subtitle: "Log every habit for ten days.",      motto: "What is measured is mastered.", icon: "📜", tone: "iron",   metric: "logged_days",    goal: 10,  xp: 200 },
+      { key: "iron_word",   title: "IRON WORD",         subtitle: "Answer the morning gratitude ritual for seven days.", motto: "My word is iron.", icon: "⚜", tone: "gold", metric: "gratitude_streak", goal: 7, xp: 300 },
+    ];
+    for (const s of seed) {
+      await pool.query(
+        `INSERT INTO quests (key, title, subtitle, motto, icon, tone, metric, goal, xp_reward, progress, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10)`,
+        [s.key, s.title, s.subtitle, s.motto, s.icon, s.tone, s.metric, s.goal, s.xp, now],
+      );
+    }
+  }
+
+  // Seed default records on first boot.
+  const rec = await pool.query(`SELECT COUNT(*)::int AS n FROM records`);
+  if (rec.rows[0].n === 0) {
+    const now = new Date().toISOString();
+    const seed = [
+      { key: "best_perfect_streak", label: "Longest Perfect Streak", unit: "days" },
+      { key: "best_week_perfect",   label: "Most Perfect Days in a Week", unit: "days" },
+      { key: "longest_sober",       label: "Longest Sober Streak", unit: "days" },
+      { key: "best_week_xp",        label: "Best Week (XP)", unit: "XP" },
+      { key: "most_lifts_week",     label: "Most Workouts in a Week", unit: "lifts" },
+      { key: "most_habits_day",     label: "Most Habits Hit in a Day", unit: "habits" },
+    ];
+    for (const s of seed) {
+      await pool.query(
+        `INSERT INTO records (key, label, unit, value, updated_at) VALUES ($1,$2,$3,0,$4)`,
+        [s.key, s.label, s.unit, now],
+      );
+    }
+  }
 }
 
 export interface IStorage {
@@ -190,6 +270,15 @@ export interface IStorage {
   getRituals(): Promise<Ritual[]>;
   getRitual(key: string): Promise<Ritual | undefined>;
   upsertRitual(key: string, patch: Partial<InsertRitual>): Promise<Ritual>;
+  // Quests
+  getQuests(): Promise<Quest[]>;
+  updateQuest(key: string, patch: Partial<Quest>): Promise<Quest | undefined>;
+  // Records
+  getRecords(): Promise<Record_[]>;
+  updateRecord(key: string, patch: Partial<Record_>): Promise<Record_ | undefined>;
+  // Boss seals
+  getBossSeals(): Promise<BossSeal[]>;
+  createBossSeal(seal: InsertBossSeal): Promise<BossSeal>;
   // Reset
   resetAll(): Promise<void>;
 }
@@ -313,12 +402,57 @@ export class DatabaseStorage implements IStorage {
     return rows[0];
   }
 
+  async getQuests() {
+    return db.select().from(quests).orderBy(quests.id);
+  }
+  async updateQuest(key: string, patch: Partial<Quest>) {
+    const now = new Date().toISOString();
+    const rows = await db
+      .update(quests)
+      .set({ ...patch, updatedAt: now })
+      .where(eq(quests.key, key))
+      .returning();
+    return rows[0];
+  }
+
+  async getRecords() {
+    return db.select().from(records).orderBy(records.id);
+  }
+  async updateRecord(key: string, patch: Partial<Record_>) {
+    const now = new Date().toISOString();
+    const rows = await db
+      .update(records)
+      .set({ ...patch, updatedAt: now })
+      .where(eq(records.key, key))
+      .returning();
+    return rows[0];
+  }
+
+  async getBossSeals() {
+    return db.select().from(bossSeals).orderBy(desc(bossSeals.date));
+  }
+  async createBossSeal(seal: InsertBossSeal) {
+    // Upsert-ish: skip if already sealed for this date.
+    const existing = await db.select().from(bossSeals).where(eq(bossSeals.date, seal.date));
+    if (existing[0]) return existing[0];
+    const rows = await db
+      .insert(bossSeals)
+      .values({ ...seal })
+      .returning();
+    return rows[0];
+  }
+
   async resetAll() {
     await db.delete(dailyLogs);
     await db.delete(tasks);
     await db.delete(journal);
     await db.delete(goals);
     await db.delete(challenges);
+    await db.delete(bossSeals);
+    // Reset quest progress but keep the definitions
+    await db.update(quests).set({ progress: 0, completedAt: null, claimedAt: null, updatedAt: new Date().toISOString() });
+    // Reset record values but keep the definitions
+    await db.update(records).set({ value: 0, setOnDate: null, seenAt: null, updatedAt: new Date().toISOString() });
     // Keep rituals — they're the user's identity, not their data
   }
 }

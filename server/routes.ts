@@ -132,5 +132,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // Quests
+  app.get("/api/quests", async (_req, res) => res.json(await storage.getQuests()));
+  const patchQuest = z.object({
+    progress: z.number().optional(),
+    completedAt: z.string().nullable().optional(),
+    claimedAt: z.string().nullable().optional(),
+  });
+  app.patch("/api/quests/:key", async (req, res) => {
+    try {
+      const p = patchQuest.parse(req.body);
+      res.json(await storage.updateQuest(req.params.key, p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  // Records
+  app.get("/api/records", async (_req, res) => res.json(await storage.getRecords()));
+  const patchRecord = z.object({
+    value: z.number().optional(),
+    setOnDate: z.string().nullable().optional(),
+    seenAt: z.string().nullable().optional(),
+  });
+  app.patch("/api/records/:key", async (req, res) => {
+    try {
+      const p = patchRecord.parse(req.body);
+      res.json(await storage.updateRecord(req.params.key, p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  // Boss seals
+  app.get("/api/boss-seals", async (_req, res) => res.json(await storage.getBossSeals()));
+  const createSealS = z.object({
+    date: z.string(),
+    sealedAt: z.string(),
+    xpAwarded: z.number().default(0),
+  });
+  app.post("/api/boss-seals", async (req, res) => {
+    try {
+      const p = createSealS.parse(req.body);
+      res.json(await storage.createBossSeal(p));
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
   return httpServer;
 }
