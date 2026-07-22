@@ -11,7 +11,7 @@ import {
 } from "@/lib/analytics";
 import { useToday } from "@/hooks/useToday";
 import { PageHeader } from "@/components/PageHeader";
-import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2, Moon, Heart, Footprints, Activity } from "lucide-react";
+import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2, Moon, Heart, Footprints, Activity, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playSound, useMuteState, haptic } from "@/hooks/useSound";
 
@@ -486,15 +486,35 @@ function HealthCard({ log }: { log?: DailyLog }) {
   const steps = log?.steps ?? null;
   const anyData = sh != null || ss != null || rhr != null || steps != null;
 
+  const handleSync = () => {
+    const prompt = "sync my steps";
+    // Fire-and-forget clipboard copy (works on iOS Safari with user gesture)
+    if (navigator.clipboard) navigator.clipboard.writeText(prompt).catch(() => {});
+    // Try Perplexity deep-link; iOS will silently ignore if the scheme isn't
+    // registered and we already have the clipboard fallback in place.
+    window.location.href = `perplexity://ask?q=${encodeURIComponent(prompt)}`;
+  };
+
   return (
     <div className="mb-8 rounded-sm border border-[#2a2a2a] bg-[#0a0908] p-5" data-testid="health-card">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 opacity-70" />
           <div className="microlabel">Body Signals</div>
         </div>
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          {anyData ? "Oura · Apple Health" : "Sync from iPhone to populate"}
+        <div className="flex items-center gap-3">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+            {anyData ? "Oura · Apple Health" : "Sync from iPhone to populate"}
+          </div>
+          <button
+            onClick={handleSync}
+            className="flex items-center gap-1.5 rounded-sm border border-[#3a3a3a] hover:border-[#e0b74f] px-3 py-1.5 text-[10px] uppercase tracking-[0.25em] text-muted-foreground hover:text-[#e0b74f] transition-colors"
+            data-testid="btn-sync-steps"
+            title="Opens Perplexity to sync steps from Apple Health"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Sync Steps
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
