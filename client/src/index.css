@@ -87,9 +87,17 @@
   * { @apply border-border; }
   html { background: hsl(var(--background)); }
   html, body, #root { min-height: 100%; }
+  /* Prevent stray horizontal scroll on iOS when children set widths slightly
+     wider than the viewport (e.g., percentage-based grids + safe-area math). */
+  html, body { overflow-x: hidden; max-width: 100%; }
   body {
     @apply font-sans antialiased text-foreground bg-background;
     letter-spacing: -0.005em;
+  }
+  /* Mobile <main> padding: 3.5rem header + iOS safe-area inset.
+     Desktop overrides with md:!pt-0. */
+  .mobile-safe-top {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
   }
   ::selection {
     background: hsl(40 15% 88% / 0.25);

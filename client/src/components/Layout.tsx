@@ -80,14 +80,20 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex">
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-40 h-14 bg-background border-b border-border flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <img src={crestMark} alt="TDD" className="w-8 h-8 object-contain" draggable={false} />
-          <div className="serif text-xs tracking-widest" style={{fontWeight: 700}}>Tyler's Daily Discipline</div>
+      <div
+        className="md:hidden fixed top-0 inset-x-0 z-40 bg-background border-b border-border flex items-center justify-between px-4"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          height: "calc(3.5rem + env(safe-area-inset-top, 0px))",
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <img src={crestMark} alt="TDD" className="w-8 h-8 object-contain shrink-0" draggable={false} />
+          <div className="serif text-xs tracking-widest truncate" style={{fontWeight: 700}}>Tyler's Daily Discipline</div>
         </div>
         <button
           onClick={() => setMobileOpen((v) => !v)}
-          className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-secondary"
+          className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-secondary shrink-0 ml-2"
           aria-label="Toggle nav"
         >
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -156,7 +162,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 min-w-0 md:pt-0 pt-14">{children}</main>
+      <main className="flex-1 min-w-0 mobile-safe-top md:!pt-0">{children}</main>
 
       {/* Global click sounds — makes the whole app feel alive */}
       <GlobalClickSounds />
