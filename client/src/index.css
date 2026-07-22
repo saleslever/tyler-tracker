@@ -99,6 +99,10 @@
   .mobile-safe-top {
     padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
   }
+  /* Bottom tab bar is 3.5rem tall + iOS home-indicator inset. */
+  .mobile-safe-bottom {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
   ::selection {
     background: hsl(40 15% 88% / 0.25);
     color: hsl(40 15% 98%);

@@ -161,7 +161,41 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 min-w-0 mobile-safe-top md:!pt-0">{children}</main>
+      <main className="flex-1 min-w-0 mobile-safe-top mobile-safe-bottom md:!pt-0 md:!pb-0">{children}</main>
+
+      {/* Mobile bottom tab bar — the five most-used destinations. Sidebar
+          (via hamburger) still holds the less-frequent pages. */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t border-border"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
+        <div className="grid grid-cols-5 h-14">
+          {[
+            { href: "/", label: "Home", icon: LayoutDashboard },
+            { href: "/habits", label: "Habits", icon: CheckSquare },
+            { href: "/mood", label: "Mood", icon: HeartPulse },
+            { href: "/journal", label: "Journal", icon: BookOpen },
+            { href: "/analytics", label: "Stats", icon: BarChart3 },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link key={item.href} href={item.href}>
+                <div
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-0.5 h-full text-[10px] uppercase tracking-wider transition-colors",
+                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  data-testid={`tab-${item.label.toLowerCase()}`}
+                >
+                  <Icon className={cn("w-5 h-5", active && "text-[#e0b74f]")} />
+                  <span>{item.label}</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
       {/* Global click sounds disabled per user 2026-07-21 — the tap-anywhere
           clink was noise. Habit-check chime and rank ceremonies still fire
