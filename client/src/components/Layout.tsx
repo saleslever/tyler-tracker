@@ -22,7 +22,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
 import { RankUpCeremony } from "./RankUpCeremony";
-import { GlobalClickSounds } from "./GlobalClickSounds";
 import { DailyBossVictory } from "./DailyBossVictory";
 import { NewRecordCelebration } from "./NewRecordCelebration";
 import { cn } from "@/lib/utils";
@@ -164,8 +163,10 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main */}
       <main className="flex-1 min-w-0 mobile-safe-top md:!pt-0">{children}</main>
 
-      {/* Global click sounds — makes the whole app feel alive */}
-      <GlobalClickSounds />
+      {/* Global click sounds disabled per user 2026-07-21 — the tap-anywhere
+          clink was noise. Habit-check chime and rank ceremonies still fire
+          from their own components. */}
+      {/* <GlobalClickSounds /> */}
 
       {/* Global ceremonies — mounted once, listen for events */}
       <GlobalCeremonies />
