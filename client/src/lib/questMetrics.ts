@@ -1,5 +1,5 @@
 import type { DailyLog, BossSeal, Challenge, Quest } from "@shared/schema";
-import { HABITS, habitHit, addDays } from "./analytics";
+import { HABITS, habitHit, addDays, type HabitDef } from "./analytics";
 
 /**
  * Compute the current numeric progress for a given quest metric.
@@ -18,6 +18,7 @@ export function computeQuestProgress(
   logs: DailyLog[],
   seals: BossSeal[],
   _challenge?: Challenge | null,
+  habits: HabitDef[] = HABITS,
 ): number {
   if (!logs.length) return 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -79,7 +80,7 @@ export function computeQuestProgress(
       let safety = 0;
       while (cur <= today && safety++ < 40) {
         const log = byDate.get(cur);
-        if (log && HABITS.some((h) => habitHit(log, h))) n++;
+        if (log && habits.some((h) => habitHit(log, h))) n++;
         cur = addDays(cur, 1);
       }
       return n;
@@ -101,8 +102,42 @@ export function computeQuestProgress(
       }
       return n;
     }
-    default:
+    default: {
+      // Support dynamic habit-target quests. Metric format: "habit_streak:<habitKey>"
+      // or "habit_month:<habitKey>" (hits in last 30d).
+      if (metric.startsWith("habit_streak:")) {
+        const key = metric.slice("habit_streak:".length);
+        const h = habits.find((x) => x.key === key) ?? HABITS.find((x) => x.key === key);
+        if (!h) return 0;
+        let cur = today;
+        let n = 0;
+        let safety = 0;
+        while (safety++ < 400) {
+          const log = byDate.get(cur);
+          if (!log) break;
+          if (habitHit(log, h)) {
+            n++;
+            cur = addDays(cur, -1);
+          } else break;
+        }
+        return n;
+      }
+      if (metric.startsWith("habit_month:")) {
+        const key = metric.slice("habit_month:".length);
+        const h = habits.find((x) => x.key === key) ?? HABITS.find((x) => x.key === key);
+        if (!h) return 0;
+        let n = 0;
+        let cur = addDays(today, -29);
+        let safety = 0;
+        while (cur <= today && safety++ < 40) {
+          const log = byDate.get(cur);
+          if (log && habitHit(log, h)) n++;
+          cur = addDays(cur, 1);
+        }
+        return n;
+      }
       return 0;
+    }
   }
 }
 

@@ -1,7 +1,17 @@
 import type { DailyLog, Challenge } from "@shared/schema";
-import { HABITS, habitHit, addDays, type BoolHabitKey, type NumHabitKey } from "./analytics";
+import { HABITS, habitHit, addDays, type BoolHabitKey, type NumHabitKey, type HabitDef } from "./analytics";
 
 export type HabitKey = BoolHabitKey | NumHabitKey;
+
+// Merge caller-supplied habits with the static built-ins so scoring keeps
+// working even if a habit has been renamed/hidden but its key is still
+// referenced in a challenge.
+function resolveHabits(habits?: HabitDef[]): HabitDef[] {
+  const byKey = new Map<string, HabitDef>();
+  for (const h of HABITS) byKey.set(h.key, h);
+  if (habits) for (const h of habits) byKey.set(h.key, h);
+  return Array.from(byKey.values());
+}
 
 /**
  * Challenge helpers — pure functions, no side effects.
@@ -36,21 +46,23 @@ export function dayNumber(challenge: Challenge, dateStr: string): number {
   return daysBetween(challenge.startDate, dateStr) + 1;
 }
 
-export function requiredDailyHabits(challenge: Challenge): HabitKey[] {
+export function requiredDailyHabits(challenge: Challenge, habits?: HabitDef[]): HabitKey[] {
   try {
     const keys = JSON.parse(challenge.requiredDaily) as HabitKey[];
-    return keys.filter((k) => HABITS.some((h) => h.key === k));
+    const all = resolveHabits(habits);
+    return keys.filter((k) => all.some((h) => h.key === k));
   } catch {
     return [];
   }
 }
 
-export function requiredWeeklyHabits(challenge: Challenge): Record<HabitKey, number> {
+export function requiredWeeklyHabits(challenge: Challenge, habits?: HabitDef[]): Record<HabitKey, number> {
   try {
     const obj = JSON.parse(challenge.requiredWeekly) as Record<string, number>;
+    const all = resolveHabits(habits);
     const out: Record<string, number> = {};
     for (const [k, v] of Object.entries(obj)) {
-      if (HABITS.some((h) => h.key === k)) out[k] = v;
+      if (all.some((h) => h.key === k)) out[k] = v;
     }
     return out as Record<HabitKey, number>;
   } catch {
@@ -58,10 +70,11 @@ export function requiredWeeklyHabits(challenge: Challenge): Record<HabitKey, num
   }
 }
 
-export function optionalHabits(challenge: Challenge): HabitKey[] {
+export function optionalHabits(challenge: Challenge, habits?: HabitDef[]): HabitKey[] {
   try {
     const keys = JSON.parse(challenge.optionalHabits) as HabitKey[];
-    return keys.filter((k) => HABITS.some((h) => h.key === k));
+    const all = resolveHabits(habits);
+    return keys.filter((k) => all.some((h) => h.key === k));
   } catch {
     return [];
   }
@@ -71,11 +84,14 @@ export function optionalHabits(challenge: Challenge): HabitKey[] {
 export function hitAllDailyRequired(
   log: DailyLog | undefined,
   challenge: Challenge,
+  habits?: HabitDef[],
 ): boolean {
-  const keys = requiredDailyHabits(challenge);
+  const keys = requiredDailyHabits(challenge, habits);
   if (!keys.length) return false;
+  const all = resolveHabits(habits);
   return keys.every((k) => {
-    const h = HABITS.find((x) => x.key === k)!;
+    const h = all.find((x) => x.key === k);
+    if (!h) return false;
     return habitHit(log, h);
   });
 }
@@ -88,23 +104,27 @@ export function hitAllDailyRequired(
 export function isPerfectDay(
   log: DailyLog | undefined,
   challenge: Challenge,
+  habits?: HabitDef[],
 ): boolean {
   if (!log) return false;
   if (log.cheatDay === 1) return true;
-  return hitAllDailyRequired(log, challenge);
+  return hitAllDailyRequired(log, challenge, habits);
 }
 
 /** Fraction 0..1 of daily-required habits hit on a day. Cheat day counts as 1.0 */
 export function dayScoreForChallenge(
   log: DailyLog | undefined,
   challenge: Challenge,
+  habits?: HabitDef[],
 ): number {
   if (!log) return 0;
   if (log.cheatDay === 1) return 1;
-  const keys = requiredDailyHabits(challenge);
+  const keys = requiredDailyHabits(challenge, habits);
   if (!keys.length) return 0;
+  const all = resolveHabits(habits);
   const hits = keys.filter((k) => {
-    const h = HABITS.find((x) => x.key === k)!;
+    const h = all.find((x) => x.key === k);
+    if (!h) return false;
     return habitHit(log, h);
   }).length;
   return hits / keys.length;
@@ -168,7 +188,9 @@ export function rollupChallenge(
   challenge: Challenge,
   logs: DailyLog[],
   today: string,
+  habits?: HabitDef[],
 ): ChallengeRollup {
+  const allHabits = resolveHabits(habits);
   const logsByDate = new Map(logs.map((l) => [l.date, l] as const));
 
   const status: "upcoming" | "active" | "complete" =
@@ -190,7 +212,7 @@ export function rollupChallenge(
   for (let i = 0; i < daysElapsed; i++) {
     const dStr = addDays(challenge.startDate, i);
     const log = logsByDate.get(dStr);
-    const perfect = isPerfectDay(log, challenge);
+    const perfect = isPerfectDay(log, challenge, allHabits);
     perfectByDate.push(perfect);
     if (perfect) {
       perfectDays++;
@@ -218,16 +240,16 @@ export function rollupChallenge(
 
   const todayLog = logsByDate.get(today);
   const todayIsCheat = todayLog?.cheatDay === 1;
-  const todayAllDailyHit = hitAllDailyRequired(todayLog, challenge);
+  const todayAllDailyHit = hitAllDailyRequired(todayLog, challenge, allHabits);
   const todayPerfect =
     status === "active" && (todayIsCheat || todayAllDailyHit);
 
   // Weekly rollup for the current week (clamped to challenge range).
-  const weekly = requiredWeeklyHabits(challenge);
+  const weekly = requiredWeeklyHabits(challenge, allHabits);
   const weekDays = weekDaysInChallenge(challenge, today);
   const habitCounts: Record<string, { hit: number; required: number }> = {};
   for (const [key, required] of Object.entries(weekly)) {
-    const h = HABITS.find((x) => x.key === key);
+    const h = allHabits.find((x) => x.key === key);
     if (!h) continue;
     let hit = 0;
     for (const d of weekDays) {

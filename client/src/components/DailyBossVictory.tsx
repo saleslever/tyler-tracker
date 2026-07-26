@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { DailyLog, Challenge, BossSeal } from "@shared/schema";
 import { hitAllDailyRequired } from "@/lib/challenge";
+import { useHabits } from "@/lib/analytics";
 import { playSound, haptic } from "@/hooks/useSound";
 import { Fleuron } from "./Ornament";
 import { Confetti } from "./Confetti";
@@ -44,6 +45,7 @@ export function DailyBossVictory({ logs, challenge }: Props) {
 
   const today = todayYMD();
   const todayLog = useMemo(() => logs.find((l) => l.date === today), [logs, today]);
+  const habits = useHabits();
   const alreadySealed = useMemo(() => seals.some((s) => s.date === today), [seals, today]);
 
   // Compute the day number relative to the active challenge (fallback: streak from history)
@@ -63,7 +65,7 @@ export function DailyBossVictory({ logs, challenge }: Props) {
     if (!todayLog) return;
     if (alreadySealed) return;
     if (seenThisSession.has(today)) return;
-    const victorious = hitAllDailyRequired(todayLog, challenge ?? null);
+    const victorious = hitAllDailyRequired(todayLog, challenge ?? null, habits);
     if (!victorious) return;
 
     seenThisSession.add(today);
@@ -78,7 +80,7 @@ export function DailyBossVictory({ logs, challenge }: Props) {
     playSound("bossHorn");
     haptic("heavy");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayLog, alreadySealed, challenge, today]);
+  }, [todayLog, alreadySealed, challenge, today, habits]);
 
   if (!showDate) return null;
   return (

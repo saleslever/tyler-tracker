@@ -5,6 +5,7 @@ import type { DailyLog, BossSeal, Challenge, Quest } from "@shared/schema";
 import { PageHeader } from "@/components/PageHeader";
 import { Fleuron } from "@/components/Ornament";
 import { computeQuestProgress, isQuestComplete } from "@/lib/questMetrics";
+import { useHabits } from "@/lib/analytics";
 import { playSound, haptic } from "@/hooks/useSound";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ export default function QuestsPage() {
   const { data: logs = [] } = useQuery<DailyLog[]>({ queryKey: ["/api/logs"] });
   const { data: seals = [] } = useQuery<BossSeal[]>({ queryKey: ["/api/boss-seals"] });
   const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
+  const habits = useHabits();
 
   const patchQuest = useMutation({
     mutationFn: async ({ key, patch }: { key: string; patch: Partial<Quest> }) => {
@@ -60,7 +62,7 @@ export default function QuestsPage() {
   useEffect(() => {
     for (const q of quests) {
       if (q.claimedAt) continue; // Fully claimed cycle; wait for user
-      const progress = computeQuestProgress(q.metric, logs, seals, challenge);
+      const progress = computeQuestProgress(q.metric, logs, seals, challenge, habits);
       const nowComplete = progress >= q.goal;
       const patch: Partial<Quest> = {};
       if (progress !== q.progress) patch.progress = progress;

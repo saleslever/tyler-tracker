@@ -13,9 +13,9 @@ import {
   dayScoreForChallenge,
   isPerfectDay,
 } from "@/lib/challenge";
-import { HABITS, habitHit, addDays } from "@/lib/analytics";
+import { HABITS, habitHit, addDays, useHabits } from "@/lib/analytics";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Trophy, Plus, Check, X, Flame, Sparkles } from "lucide-react";
+import { Trophy, Plus, Check, X, Flame, Sparkles, Settings2 } from "lucide-react";
 
 export default function ChallengePage() {
   const today = useToday();
@@ -26,6 +26,7 @@ export default function ChallengePage() {
   const { data: allChallenges = [] } = useQuery<ChallengeT[]>({
     queryKey: ["/api/challenges"],
   });
+  const habits = useHabits();
 
   const upcoming = useMemo(() => {
     if (activeChallenge) return null;
@@ -37,8 +38,8 @@ export default function ChallengePage() {
   const challenge = activeChallenge || upcoming || null;
 
   const rollup = useMemo(
-    () => (challenge ? rollupChallenge(challenge, logs, today) : null),
-    [challenge, logs, today],
+    () => (challenge ? rollupChallenge(challenge, logs, today, habits) : null),
+    [challenge, logs, today, habits],
   );
 
   const todayLog = useMemo(
@@ -108,9 +109,9 @@ export default function ChallengePage() {
     );
   }
 
-  const dailyKeys = requiredDailyHabits(challenge);
-  const weeklyReq = requiredWeeklyHabits(challenge);
-  const optional = optionalHabits(challenge);
+  const dailyKeys = requiredDailyHabits(challenge, habits);
+  const weeklyReq = requiredWeeklyHabits(challenge, habits);
+  const optional = optionalHabits(challenge, habits);
   const cheatsRemaining = Math.max(
     0,
     rollup.thisWeek.cheatsAllowed - rollup.thisWeek.cheatsUsed,
@@ -186,7 +187,7 @@ export default function ChallengePage() {
             if (!isFuture) {
               if (isCheat) state = "cheat";
               else {
-                const score = dayScoreForChallenge(log, challenge);
+                const score = dayScoreForChallenge(log, challenge, habits);
                 state = score === 1 ? "perfect" : score > 0 ? "partial" : "miss";
               }
             }
@@ -256,7 +257,8 @@ export default function ChallengePage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {dailyKeys.map((k) => {
-            const h = HABITS.find((x) => x.key === k)!;
+            const h = habits.find((x) => x.key === k) ?? HABITS.find((x) => x.key === k);
+            if (!h) return null;
             const hitToday = habitHit(todayLog, h);
             return (
               <div
@@ -293,7 +295,8 @@ export default function ChallengePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {Object.entries(weeklyReq).map(([k, needed]) => {
-              const h = HABITS.find((x) => x.key === k)!;
+              const h = habits.find((x) => x.key === k) ?? HABITS.find((x) => x.key === k);
+              if (!h) return null;
               const count = rollup.thisWeek.habitCounts[k as any] ?? { hit: 0, required: needed };
               const done = count.hit >= count.required;
               return (
@@ -335,7 +338,7 @@ export default function ChallengePage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {optional.map((k) => {
-              const h = HABITS.find((x) => x.key === k);
+              const h = habits.find((x) => x.key === k) ?? HABITS.find((x) => x.key === k);
               if (!h) return null;
               const hitToday = habitHit(todayLog, h);
               return (
@@ -357,6 +360,9 @@ export default function ChallengePage() {
         </section>
       )}
 
+      {/* Challenge habit editor */}
+      <ChallengeHabitEditor challenge={challenge} habits={habits} />
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <Link href="/habits">
           <Button variant="outline" size="sm">Log today's habits →</Button>
@@ -365,7 +371,7 @@ export default function ChallengePage() {
           {rollup.status === "active"
             ? rollup.todayIsCheat
               ? "Cheat day active. Rest, enjoy — the streak holds."
-              : isPerfectDay(todayLog, challenge)
+              : isPerfectDay(todayLog, challenge, habits)
                 ? "Today is perfect. Well done."
                 : rollup.currentPerfectStreak > 0
                   ? `${rollup.currentPerfectStreak}-day streak alive. Close today out clean.`
@@ -475,5 +481,143 @@ function NoChallenge({ existing }: { existing: ChallengeT[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * ChallengeHabitEditor — inline editor for choosing which habits (built-in
+ * OR custom) count as daily-required, weekly-required (with count), or
+ * optional/tracked for this challenge. PATCHes the challenge row on save.
+ */
+function ChallengeHabitEditor({ challenge, habits }: { challenge: ChallengeT; habits: import("@/lib/analytics").HabitDef[] }) {
+  const [open, setOpen] = useState(false);
+  const parseArr = (s: string | null | undefined): string[] => {
+    try { const v = JSON.parse(s || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+  };
+  const parseObj = (s: string | null | undefined): Record<string, number> => {
+    try { const v = JSON.parse(s || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; }
+  };
+
+  const [dailyKeys, setDaily] = useState<string[]>(() => parseArr(challenge.requiredDaily));
+  const [weeklyObj, setWeekly] = useState<Record<string, number>>(() => parseObj(challenge.requiredWeekly));
+  const [optionalKeys, setOptional] = useState<string[]>(() => parseArr(challenge.optionalHabits));
+
+  // Re-sync when challenge changes
+  useMemo(() => {
+    setDaily(parseArr(challenge.requiredDaily));
+    setWeekly(parseObj(challenge.requiredWeekly));
+    setOptional(parseArr(challenge.optionalHabits));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challenge.id, challenge.requiredDaily, challenge.requiredWeekly, challenge.optionalHabits]);
+
+  const save = useMutation({
+    mutationFn: async () => apiRequest("PATCH", `/api/challenges/${challenge.id}`, {
+      requiredDaily: JSON.stringify(dailyKeys),
+      requiredWeekly: JSON.stringify(weeklyObj),
+      optionalHabits: JSON.stringify(optionalKeys),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges/active"] });
+      setOpen(false);
+    },
+  });
+
+  const toggle = (arr: string[], key: string): string[] =>
+    arr.includes(key) ? arr.filter((x) => x !== key) : [...arr, key];
+
+  // Deduplicate built-ins vs dynamic habits by key
+  const allHabits = useMemo(() => {
+    const m = new Map<string, typeof habits[number]>();
+    for (const h of HABITS) m.set(h.key, h as any);
+    for (const h of habits) m.set(h.key, h);
+    return Array.from(m.values());
+  }, [habits]);
+
+  if (!open) {
+    return (
+      <section className="card-plain p-4 mb-6 flex items-center justify-between">
+        <div>
+          <div className="serif text-sm">Customize challenge habits</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Change which habits — including custom ones — count as daily, weekly, or optional.
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-2" data-testid="button-edit-challenge-habits">
+          <Settings2 className="w-4 h-4" /> Edit
+        </Button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card-plain p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="serif text-base">Edit Challenge Habits</div>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+      <div className="text-xs text-muted-foreground mb-4">
+        Pick which habits count for this challenge. A habit can be daily-required, weekly-required (with a target count), or just tracked.
+      </div>
+
+      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+        {allHabits.map((h) => {
+          const isDaily = dailyKeys.includes(h.key);
+          const weekCount = weeklyObj[h.key] ?? 0;
+          const isOptional = optionalKeys.includes(h.key);
+          return (
+            <div key={h.key} className="flex items-center justify-between p-2 rounded-md border border-border/50 bg-secondary/20">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg">{h.emoji || "•"}</span>
+                <div className="text-sm truncate">{h.label}</div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDaily(toggle(dailyKeys, h.key))}
+                  className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded border ${isDaily ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200" : "border-border text-muted-foreground"}`}
+                  data-testid={`toggle-daily-${h.key}`}
+                >Daily</button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={7}
+                  value={weekCount}
+                  onChange={(e) => {
+                    const n = Math.max(0, Math.min(7, parseInt(e.target.value || "0", 10) || 0));
+                    setWeekly((w) => {
+                      const next = { ...w };
+                      if (n <= 0) delete next[h.key];
+                      else next[h.key] = n;
+                      return next;
+                    });
+                  }}
+                  className="w-12 text-[10px] uppercase tracking-widest px-2 py-1 rounded border border-border bg-secondary/40 text-center"
+                  title="Weekly target (0 = not weekly)"
+                  data-testid={`weekly-count-${h.key}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setOptional(toggle(optionalKeys, h.key))}
+                  className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded border ${isOptional ? "border-foreground/40 bg-foreground/10 text-foreground" : "border-border text-muted-foreground"}`}
+                  data-testid={`toggle-optional-${h.key}`}
+                >Track</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <div className="text-xs text-muted-foreground mr-auto">
+          {dailyKeys.length} daily · {Object.keys(weeklyObj).length} weekly · {optionalKeys.length} tracked
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+        <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending} data-testid="button-save-challenge-habits">
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </section>
   );
 }

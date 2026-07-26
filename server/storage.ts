@@ -416,6 +416,7 @@ export interface IStorage {
   getChallenges(): Promise<Challenge[]>;
   getActiveChallenge(today: string): Promise<Challenge | undefined>;
   createChallenge(c: InsertChallenge): Promise<Challenge>;
+  updateChallenge(id: number, patch: Partial<InsertChallenge>): Promise<Challenge | undefined>;
   deleteChallenge(id: number): Promise<void>;
   // Rituals
   getRituals(): Promise<Ritual[]>;
@@ -598,6 +599,10 @@ export class DatabaseStorage implements IStorage {
   }
   async createChallenge(c: InsertChallenge) {
     const rows = await db.insert(challenges).values({ ...c, createdAt: new Date().toISOString() }).returning();
+    return rows[0];
+  }
+  async updateChallenge(id: number, patch: Partial<InsertChallenge>) {
+    const rows = await db.update(challenges).set(patch).where(eq(challenges.id, id)).returning();
     return rows[0];
   }
   async deleteChallenge(id: number) {

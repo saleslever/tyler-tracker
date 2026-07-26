@@ -139,22 +139,56 @@ const HabitRow = memo(function HabitRow({
         )}
       </div>
 
-      {habit.kind === "num" && (
-        <input
-          type="number"
-          inputMode="decimal"
-          step={habit.key === "weight" || habit.key === "fastingHours" ? "0.1" : "1"}
-          value={localValue}
-          onChange={(e) => {
-            setLocalValue(e.target.value);
-            flush(e.target.value);
-          }}
-          onBlur={commitNow}
-          placeholder="—"
-          className="w-24 h-9 text-right rounded bg-secondary/50 border border-border px-3 text-sm focus:outline-none focus:border-foreground/50"
-          data-testid={`input-${habit.key}`}
-        />
-      )}
+      {habit.kind === "num" && (() => {
+        const stepSize = habit.key === "weight" || habit.key === "fastingHours" ? 0.1 : 1;
+        const stepBig = habit.key === "steps" ? 500 : habit.key === "water" || habit.key === "vitamins" ? 1 : stepSize;
+        const bump = (delta: number) => {
+          const cur = parseFloat(localValue || "0") || 0;
+          const next = Math.max(0, +(cur + delta).toFixed(2));
+          const str = String(next);
+          setLocalValue(str);
+          flush(str);
+        };
+        return (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => bump(-stepBig)}
+              className="w-8 h-9 rounded bg-secondary/40 border border-border text-sm text-muted-foreground active:bg-secondary/70"
+              aria-label={`Decrease ${habit.label}`}
+              data-testid={`dec-${habit.key}`}
+            >−</button>
+            <input
+              type="number"
+              inputMode="decimal"
+              enterKeyHint="done"
+              step={stepSize}
+              value={localValue}
+              onChange={(e) => {
+                setLocalValue(e.target.value);
+                flush(e.target.value);
+              }}
+              onBlur={commitNow}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  commitNow();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="—"
+              className="w-20 h-9 text-right rounded bg-secondary/50 border border-border px-2 text-sm focus:outline-none focus:border-foreground/50"
+              data-testid={`input-${habit.key}`}
+            />
+            <button
+              type="button"
+              onClick={() => bump(stepBig)}
+              className="w-8 h-9 rounded bg-secondary/40 border border-border text-sm text-muted-foreground active:bg-secondary/70"
+              aria-label={`Increase ${habit.label}`}
+              data-testid={`inc-${habit.key}`}
+            >+</button>
+          </div>
+        );
+      })()}
 
       <div className="w-16 text-right">
         <div className="text-xs text-muted-foreground">30d</div>

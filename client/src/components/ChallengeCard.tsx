@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import type { DailyLog, Challenge } from "@shared/schema";
 import { useToday } from "@/hooks/useToday";
 import { rollupChallenge, dayScoreForChallenge } from "@/lib/challenge";
+import { useHabits } from "@/lib/analytics";
 import { addDays } from "@/lib/analytics";
 import { Trophy, ArrowRight, Flame } from "lucide-react";
 
@@ -22,6 +23,7 @@ export function ChallengeCard() {
     queryKey: ["/api/challenges"],
   });
   const { data: logs = [] } = useQuery<DailyLog[]>({ queryKey: ["/api/logs"] });
+  const habits = useHabits();
 
   // Fall back to the next upcoming challenge if none active
   const challenge = useMemo(() => {
@@ -34,8 +36,8 @@ export function ChallengeCard() {
   }, [activeChallenge, allChallenges, today]);
 
   const rollup = useMemo(
-    () => (challenge ? rollupChallenge(challenge, logs, today) : null),
-    [challenge, logs, today],
+    () => (challenge ? rollupChallenge(challenge, logs, today, habits) : null),
+    [challenge, logs, today, habits],
   );
 
   // Small strip of the trailing 14 challenge days for at-a-glance progress
@@ -56,7 +58,7 @@ export function ChallengeCard() {
         if (log?.cheatDay === 1) {
           state = "cheat";
         } else {
-          const score = dayScoreForChallenge(log, challenge);
+          const score = dayScoreForChallenge(log, challenge, habits);
           if (score === 1) state = "perfect";
           else if (score > 0) state = "partial";
           else state = "miss";

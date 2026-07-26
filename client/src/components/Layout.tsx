@@ -19,6 +19,7 @@ import {
   Crown,
   HeartPulse,
   Timer,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
@@ -52,6 +53,12 @@ const NAV = [
       { href: "/alignment", label: "Morning Alignment", icon: Target },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/milestones", label: "Milestones", icon: Crown },
+    ],
+  },
+  {
+    section: "App",
+    items: [
+      { href: "/settings", label: "Settings", icon: SettingsIcon },
     ],
   },
 ];

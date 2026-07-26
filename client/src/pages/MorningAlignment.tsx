@@ -77,8 +77,8 @@ function MorningHero({
 
   // Challenge day + perfect streak
   const rollup = useMemo(
-    () => (challenge ? rollupChallenge(challenge, logs, today) : null),
-    [challenge, logs, today],
+    () => (challenge ? rollupChallenge(challenge, logs, today, habits) : null),
+    [challenge, logs, today, habits],
   );
 
   // Weight: latest recorded, plus 7-day trend
@@ -304,7 +304,7 @@ function YesterdayVerdict({
   const ydayLog = logs.find((l) => l.date === yesterday);
   const habits = useHabits();
   const score = dayScore(ydayLog, habits);
-  const daily = challenge ? requiredDailyHabits(challenge) : [];
+  const daily = challenge ? requiredDailyHabits(challenge, habits) : [];
 
   const hitsList = habits.filter((h) => habitHit(ydayLog, h));
   const missList = habits.filter(
@@ -424,8 +424,8 @@ function WeekChain({
   const monday = addDays(today, mondayOffset);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
-  const daily = challenge ? requiredDailyHabits(challenge) : [];
-  const weekly = challenge ? requiredWeeklyHabits(challenge) : {} as Record<string, number>;
+  const daily = challenge ? requiredDailyHabits(challenge, habits) : [];
+  const weekly = challenge ? requiredWeeklyHabits(challenge, habits) : {} as Record<string, number>;
 
   const weekLogs = days.map((d) => logs.find((l) => l.date === d));
   const cheats = weekLogs.filter((l) => l?.cheatDay === 1).length;
@@ -452,7 +452,8 @@ function WeekChain({
           const log = weekLogs[i];
           const perfect = log?.cheatDay === 1 ||
             (daily.length > 0 && daily.every((k) => {
-              const h = HABITS.find((x) => x.key === k)!;
+              const h = habits.find((x) => x.key === k) ?? HABITS.find((x) => x.key === k);
+              if (!h) return false;
               return habitHit(log, h);
             }));
           const partial = !perfect && log && dayScore(log, habits) >= 0.5;
@@ -531,7 +532,8 @@ function WeekChain({
               {weekLogs.filter((l, i) => {
                 const dstr = days[i];
                 return (l?.cheatDay === 1) || (daily.length > 0 && daily.every((k) => {
-                  const h = HABITS.find((x) => x.key === k)!;
+                  const h = habits.find((x) => x.key === k) ?? HABITS.find((x) => x.key === k);
+                  if (!h) return false;
                   return habitHit(l, h);
                 }));
               }).length}

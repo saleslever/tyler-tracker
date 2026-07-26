@@ -18,6 +18,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
+  // Full JSON export (backup)
+  app.get("/api/export", async (_req, res) => {
+    const [logs, tasks, journal, goals, challenges, rituals, quests, records, seals, moods, fasts, habits] = await Promise.all([
+      storage.getAllLogs(),
+      storage.getTasks(),
+      storage.getAllJournal(),
+      storage.getGoals(),
+      storage.getChallenges(),
+      storage.getRituals(),
+      storage.getQuests(),
+      storage.getRecords(),
+      storage.getBossSeals(),
+      storage.getMoods(),
+      storage.getFasts(),
+      storage.getHabits(),
+    ]);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="tyler-tracker-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.json({
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      logs, tasks, journal, goals, challenges, rituals, quests, records, seals, moods, fasts, habits,
+    });
+  });
+
   // Logs
   app.get("/api/logs", async (_req, res) => res.json(await storage.getAllLogs()));
   app.get("/api/logs/:date", async (req, res) => res.json(await storage.getLog(req.params.date) ?? null));
@@ -114,6 +139,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(await storage.createChallenge(p));
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
+  app.patch("/api/challenges/:id", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid id" });
+    const updated = await storage.updateChallenge(id, req.body ?? {});
+    if (!updated) return res.status(404).json({ error: "not found" });
+    res.json(updated);
+  });
+
   app.delete("/api/challenges/:id", async (req, res) => {
     await storage.deleteChallenge(Number(req.params.id));
     res.json({ ok: true });

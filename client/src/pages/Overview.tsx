@@ -87,13 +87,13 @@ export default function Overview() {
   const activeQuests = useMemo(() => {
     return [...quests]
       .filter((q) => !q.claimedAt)
-      .map((q) => ({ q, progress: computeQuestProgress(q.metric, logs, seals, challenge) }))
+      .map((q) => ({ q, progress: computeQuestProgress(q.metric, logs, seals, challenge, habits) }))
       .sort((a, b) => (b.progress / b.q.goal) - (a.progress / a.q.goal))
       .slice(0, 6);
   }, [quests, logs, seals, challenge]);
 
   // Challenge rollup for the live grid strip
-  const chRoll = useMemo(() => (challenge ? rollupChallenge(challenge, logs, today) : null), [challenge, logs, today]);
+  const chRoll = useMemo(() => (challenge ? rollupChallenge(challenge, logs, today, habits) : null), [challenge, logs, today, habits]);
 
   // Top records to celebrate
   const topRecords = records.filter((r) => r.value > 0).slice(0, 3);
