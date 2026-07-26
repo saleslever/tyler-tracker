@@ -13,7 +13,7 @@ import type {
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 
 /**
  * Postgres connection. Uses DATABASE_URL from the env — Railway provides
@@ -476,7 +476,7 @@ export class DatabaseStorage implements IStorage {
   private async mergeHabitValuesMany(logs: DailyLog[]): Promise<DailyLog[]> {
     if (logs.length === 0) return logs;
     const dates = logs.map((l) => l.date);
-    const vals = await db.select().from(habitValues).where(sql`date = ANY(${dates})`);
+    const vals = await db.select().from(habitValues).where(inArray(habitValues.date, dates));
     // Group by date
     const byDate = new Map<string, HabitValue[]>();
     for (const v of vals) {
