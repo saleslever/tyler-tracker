@@ -4,6 +4,7 @@ import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, C
 import { useToday } from "@/hooks/useToday";
 import {
   HABITS,
+  useHabits,
   habitHit,
   dayScore,
   overallStreak,
@@ -64,21 +65,22 @@ export default function Overview() {
   const range = RANGES[rangeIdx];
 
   const todayLog = logs.find((l) => l.date === today);
-  const score = dayScore(todayLog);
-  const streak = overallStreak(logs, today);
-  const rate7 = completionRate(logs, today, 7);
-  const rate30 = completionRate(logs, today, 30);
-  const ratePrev = completionRate(logs, addDays(today, -30), 30);
+  const habits = useHabits();
+  const score = dayScore(todayLog, habits);
+  const streak = overallStreak(logs, today, 0.7, habits);
+  const rate7 = completionRate(logs, today, 7, habits);
+  const rate30 = completionRate(logs, today, 30, habits);
+  const ratePrev = completionRate(logs, addDays(today, -30), 30, habits);
   const delta = rate30 - ratePrev;
 
-  const compound = useMemo(() => compoundSeries(logs, today, range.days), [logs, today, range.days]);
+  const compound = useMemo(() => compoundSeries(logs, today, range.days, habits), [logs, today, range.days, habits]);
   const totalHitsInRange = compound.length ? compound[compound.length - 1].cumulative : 0;
-  const hitsToday = HABITS.filter((h) => habitHit(todayLog, h)).length;
+  const hitsToday = habits.filter((h) => habitHit(todayLog, h)).length;
 
   const openTodayTasks = tasks.filter((t) => t.list === "today" && !t.completed).length;
   const activeGoals = goals.filter((g) => g.status === "active").length;
 
-  const xp = useMemo(() => totalXP(logs, seals, quests, completions), [logs, seals, quests, completions]);
+  const xp = useMemo(() => totalXP(logs, seals, quests, completions, habits), [logs, seals, quests, completions, habits]);
   const rp = rankProgress(xp);
 
   // Active quests: not fully claimed, sorted by proximity to completion.
@@ -133,7 +135,7 @@ export default function Overview() {
             </div>
             <XPBar xp={xp} />
             <div className="grid grid-cols-3 gap-3">
-              <MiniStat label="Today" value={`+${hitsToday}`} sub={`${HABITS.length} habits`} tone={rp.rank.color} />
+              <MiniStat label="Today" value={`+${hitsToday}`} sub={`${habits.length} habits`} tone={rp.rank.color} />
               <MiniStat label="Streak" value={`${streak}`} sub="days" tone="#f5a742" icon={<Flame className="w-3.5 h-3.5" />} />
               <MiniStat label="Seals" value={`${seals.length}`} sub="days sealed" tone={rp.rank.color} icon={<Trophy className="w-3.5 h-3.5" />} />
             </div>
@@ -166,16 +168,16 @@ export default function Overview() {
         <div className="flex items-baseline justify-between mb-4">
           <div>
             <div className="microlabel">Today's Mission</div>
-            <div className="serif text-lg mt-0.5">{hitsToday === HABITS.length ? "COMPLETE — Day is Sealed" : `${HABITS.length - hitsToday} habits remain`}</div>
+            <div className="serif text-lg mt-0.5">{hitsToday === habits.length ? "COMPLETE — Day is Sealed" : `${habits.length - hitsToday} habits remain`}</div>
           </div>
           <Link href="/habits" className="text-xs tracking-widest uppercase text-muted-foreground hover:text-foreground">Enter the Field →</Link>
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-11 gap-2">
-          {HABITS.map((h) => {
+          {habits.map((h) => {
             const hit = habitHit(todayLog, h);
             return (
               <div
-                key={h.field}
+                key={h.key}
                 className={cn(
                   "aspect-square rounded-sm border flex items-center justify-center text-center px-1 transition-all",
                   hit ? "shadow-[0_0_12px_rgba(234,179,8,0.35)]" : "opacity-40",
@@ -184,7 +186,7 @@ export default function Overview() {
                   borderColor: hit ? "hsl(38 60% 60%)" : "hsl(40 15% 22%)",
                   background: hit ? "hsl(38 40% 18%)" : "#0a0908",
                 }}
-                data-testid={`mission-${h.field}`}
+                data-testid={`mission-${h.key}`}
               >
                 <div className={cn("text-[9px] tracking-widest uppercase leading-tight")}
                   style={{ fontFamily: "'Inter', sans-serif", color: hit ? "hsl(38 80% 75%)" : "hsl(40 10% 55%)" }}>
@@ -267,7 +269,7 @@ export default function Overview() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Today's Discipline" value={<span>{Math.round(score * 100)}<span className="text-xl text-muted-foreground ml-1">%</span></span>} sub={<span>{hitsToday} of {HABITS.length} habits hit today</span>} />
+        <StatCard label="Today's Discipline" value={<span>{Math.round(score * 100)}<span className="text-xl text-muted-foreground ml-1">%</span></span>} sub={<span>{hitsToday} of {habits.length} habits hit today</span>} />
         <StatCard label="Current Streak" value={<span className="flex items-baseline gap-2">{streak}<span className="text-xl text-muted-foreground">days</span></span>} sub={<span className="flex items-center gap-1"><Flame className="w-3 h-3 text-amber-400" /> Days ≥ 70% complete</span>} />
         <StatCard label="30-Day Average" value={<span>{Math.round(rate30 * 100)}<span className="text-xl text-muted-foreground ml-1">%</span></span>} sub={<span className={cn("flex items-center gap-1", delta >= 0 ? "text-emerald-400" : "text-red-400")}>{delta >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}{delta >= 0 ? "+" : ""}{Math.round(delta * 100)}% vs prior 30d</span>} />
         <StatCard label="Last 7 Days" value={<span>{Math.round(rate7 * 100)}<span className="text-xl text-muted-foreground ml-1">%</span></span>} sub={<span className="text-muted-foreground">rolling average</span>} />

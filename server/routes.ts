@@ -357,5 +357,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // ---------- Habits (definitions + values) ----------
+  app.get("/api/habits", async (_req, res) => res.json(await storage.getHabits()));
+
+  app.post("/api/habits", async (req, res) => {
+    try {
+      const { label, kind, goal, goalDirection, unit, hint, emoji } = req.body ?? {};
+      if (!label || !kind) return res.status(400).json({ error: "label and kind required" });
+      if (kind !== "bool" && kind !== "num") return res.status(400).json({ error: "kind must be bool or num" });
+      // Auto-generate a stable key from label + timestamp so the user doesn't have to think about it.
+      const slug = String(label).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "habit";
+      const key = `custom_${slug}_${Date.now().toString(36)}`;
+      // Put new habit at the end of the list.
+      const existing = await storage.getHabits();
+      const position = existing.length;
+      const row = await storage.createHabit({
+        key, label, kind,
+        goal: goal ?? null, goalDirection: goalDirection ?? null,
+        unit: unit ?? null, hint: hint ?? null, emoji: emoji ?? null,
+        position, active: 1, builtin: 0,
+        createdAt: new Date().toISOString(),
+      } as any);
+      res.json(row);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  app.patch("/api/habits/:id", async (req, res) => {
+    try {
+      const row = await storage.updateHabit(Number(req.params.id), req.body ?? {});
+      res.json(row ?? null);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  app.delete("/api/habits/:id", async (req, res) => {
+    try {
+      await storage.deleteHabit(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  app.post("/api/habits/reorder", async (req, res) => {
+    try {
+      const ids: number[] = req.body?.ids ?? [];
+      await storage.reorderHabits(ids);
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
   return httpServer;
 }

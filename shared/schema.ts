@@ -282,3 +282,48 @@ export const fasts = pgTable("fasts", {
 export const insertFastSchema = createInsertSchema(fasts).omit({ id: true });
 export type InsertFast = z.infer<typeof insertFastSchema>;
 export type Fast = typeof fasts.$inferSelect;
+
+/* =============================================================
+   Habits definition + per-day values (dynamic habits system).
+
+   `habits_def` is the canonical list of habits. On first startup the
+   13 built-in habits are seeded here with keys matching legacy
+   daily_logs columns. New user-created habits get random `custom_*`
+   keys.
+
+   `habit_values` stores per-day values ONLY for custom habits
+   (habits whose key is NOT a legacy daily_logs column). Legacy habits
+   continue to read/write their daily_logs column so no historical
+   data is lost.
+
+   Frontend calls a single /api/habits and /api/habit-values endpoint
+   and does not need to know which are legacy vs custom.
+============================================================= */
+export const habitsDef = pgTable("habits_def", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  kind: text("kind").notNull(), // 'bool' | 'num'
+  goal: doublePrecision("goal"),
+  goalDirection: text("goal_direction"), // 'gte' | 'lte' | null
+  unit: text("unit"),
+  hint: text("hint"),
+  emoji: text("emoji"),
+  position: integer("position").notNull().default(0),
+  active: integer("active").notNull().default(1),
+  builtin: integer("builtin").notNull().default(0), // 1 = seeded default, delete disabled
+  createdAt: text("created_at").notNull(),
+});
+export const insertHabitDefSchema = createInsertSchema(habitsDef).omit({ id: true });
+export type InsertHabitDef = z.infer<typeof insertHabitDefSchema>;
+export type HabitDefRow = typeof habitsDef.$inferSelect;
+
+export const habitValues = pgTable("habit_values", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(), // YYYY-MM-DD (local)
+  habitKey: text("habit_key").notNull(),
+  value: doublePrecision("value"), // for bool: 0/1; for num: raw
+});
+export const insertHabitValueSchema = createInsertSchema(habitValues).omit({ id: true });
+export type InsertHabitValue = z.infer<typeof insertHabitValueSchema>;
+export type HabitValue = typeof habitValues.$inferSelect;

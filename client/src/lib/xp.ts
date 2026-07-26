@@ -1,5 +1,5 @@
 import type { DailyLog, Quest, QuestCompletion, BossSeal } from "@shared/schema";
-import { HABITS, habitHit, addDays } from "./analytics";
+import { HABITS, habitHit, addDays, type HabitDef } from "./analytics";
 
 /**
  * XP + Rank system.
@@ -25,10 +25,10 @@ export const XP = {
 } as const;
 
 /** How much XP a single log grants. Pure. */
-export function xpFromLog(log: DailyLog | undefined): number {
+export function xpFromLog(log: DailyLog | undefined, habits: HabitDef[] = HABITS): number {
   if (!log) return 0;
   let xp = 0;
-  for (const h of HABITS) {
+  for (const h of habits) {
     if (!habitHit(log, h)) continue;
     xp += h.kind === "bool" ? XP.BOOL_HIT : XP.NUM_HIT;
   }
@@ -41,13 +41,13 @@ export function xpFromLog(log: DailyLog | undefined): number {
 }
 
 /** XP within a date range (inclusive). */
-export function xpBetween(logs: DailyLog[], from: string, to: string): number {
+export function xpBetween(logs: DailyLog[], from: string, to: string, habits: HabitDef[] = HABITS): number {
   const byDate = new Map(logs.map((l) => [l.date, l]));
   let cur = from;
   let total = 0;
   let safety = 0;
   while (cur <= to && safety++ < 5000) {
-    total += xpFromLog(byDate.get(cur));
+    total += xpFromLog(byDate.get(cur), habits);
     cur = addDays(cur, 1);
   }
   return total;
@@ -66,9 +66,10 @@ export function totalXP(
   bossSeals: BossSeal[],
   quests: Quest[],
   completions: QuestCompletion[] = [],
+  habits: HabitDef[] = HABITS,
 ): number {
   let xp = 0;
-  for (const l of logs) xp += xpFromLog(l);
+  for (const l of logs) xp += xpFromLog(l, habits);
   for (const s of bossSeals) xp += XP.BOSS_SEAL;
   if (completions.length > 0) {
     for (const c of completions) xp += c.xpAwarded;
@@ -95,9 +96,9 @@ export function totalXP(
 }
 
 /** Today's XP (just from today's log — no lifetime bonuses). Handy for the daily meter. */
-export function xpToday(logs: DailyLog[], today: string): number {
+export function xpToday(logs: DailyLog[], today: string, habits: HabitDef[] = HABITS): number {
   const log = logs.find((l) => l.date === today);
-  return xpFromLog(log);
+  return xpFromLog(log, habits);
 }
 
 /** ==== RANK LADDER =====================================================

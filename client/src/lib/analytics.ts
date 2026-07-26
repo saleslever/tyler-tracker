@@ -1,29 +1,39 @@
 import type { DailyLog } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
 
-export type BoolHabitKey =
-  | "water"
-  | "vitamins"
-  | "morningDrink"
-  | "noAlcohol"
-  | "noEnergyDrinks"
-  | "workout"
-  | "lowCarb";
-
-export type NumHabitKey = "fastingHours" | "weight" | "sleepScore" | "steps";
+// Legacy string-union kept only for backwards compatibility. Any string
+// (custom habit keys start with `custom_`) is now valid at runtime.
+export type BoolHabitKey = string;
+export type NumHabitKey = string;
 
 export interface HabitDef {
-  key: BoolHabitKey | NumHabitKey;
+  id?: number;
+  key: string;
   label: string;
   kind: "bool" | "num";
-  goal?: number; // for numeric; a log "hits" its goal when value ≥/≤ target
-  goalDirection?: "gte" | "lte"; // steps=gte, weight=lte
-  unit?: string;
-  hint?: string;
-  emoji?: string;
+  goal?: number | null;
+  goalDirection?: "gte" | "lte" | null;
+  unit?: string | null;
+  hint?: string | null;
+  emoji?: string | null;
+  position?: number;
+  active?: number;
+  builtin?: number;
 }
 
-// Order matters — this is the display order in the UI.
-// Challenge-required-daily habits are listed first.
+/**
+ * Live habit list from the server. Falls back to the built-in HABITS array
+ * during first paint so nothing flickers to "empty".
+ */
+export function useHabits(): HabitDef[] {
+  const { data } = useQuery<HabitDef[]>({ queryKey: ["/api/habits"] });
+  const rows = data && data.length > 0 ? data : HABITS;
+  // Only show active habits in the UI — soft-deleted (active=0) still exist for history.
+  return rows.filter((h) => h.active !== 0);
+}
+
+// Order matters — default fallback list used before the server hook returns.
+// Also used by non-React helper modules (xp.ts, challenge.ts) as a safety net.
 export const HABITS: HabitDef[] = [
   { key: "lowCarb", label: "Low Carb", kind: "bool", hint: "< 50g net", emoji: "🥩" },
   { key: "fastingHours", label: "Fasting", kind: "num", goal: 16, goalDirection: "gte", unit: "hrs", emoji: "⏱" },
@@ -66,10 +76,11 @@ export function habitHit(log: DailyLog | undefined, h: HabitDef): boolean {
   return false;
 }
 
-/** Overall completion for a day = fraction of habits hit. */
-export function dayScore(log: DailyLog | undefined): number {
-  const hits = HABITS.filter((h) => habitHit(log, h)).length;
-  return hits / HABITS.length;
+/** Overall completion for a day = fraction of habits hit. Pass explicit list to avoid the static default. */
+export function dayScore(log: DailyLog | undefined, habits: HabitDef[] = HABITS): number {
+  if (habits.length === 0) return 0;
+  const hits = habits.filter((h) => habitHit(log, h)).length;
+  return hits / habits.length;
 }
 
 /** Current streak = consecutive days ending today where habit was hit. */
@@ -89,14 +100,14 @@ export function currentStreak(logs: DailyLog[], h: HabitDef, today: string): num
 }
 
 /** Overall streak: consecutive days ending today with ≥ 70% completion. */
-export function overallStreak(logs: DailyLog[], today: string, threshold = 0.7): number {
+export function overallStreak(logs: DailyLog[], today: string, threshold = 0.7, habits: HabitDef[] = HABITS): number {
   const byDate = new Map(logs.map((l) => [l.date, l]));
   let streak = 0;
   let cursor = today;
-  if (dayScore(byDate.get(cursor)) < threshold) {
+  if (dayScore(byDate.get(cursor), habits) < threshold) {
     cursor = addDays(cursor, -1);
   }
-  while (dayScore(byDate.get(cursor)) >= threshold) {
+  while (dayScore(byDate.get(cursor), habits) >= threshold) {
     streak++;
     cursor = addDays(cursor, -1);
   }
@@ -104,11 +115,11 @@ export function overallStreak(logs: DailyLog[], today: string, threshold = 0.7):
 }
 
 /** Rolling completion % over last N days. */
-export function completionRate(logs: DailyLog[], today: string, days: number): number {
+export function completionRate(logs: DailyLog[], today: string, days: number, habits: HabitDef[] = HABITS): number {
   const byDate = new Map(logs.map((l) => [l.date, l]));
   let total = 0;
   for (let i = 0; i < days; i++) {
-    total += dayScore(byDate.get(addDays(today, -i)));
+    total += dayScore(byDate.get(addDays(today, -i)), habits);
   }
   return total / days;
 }
@@ -127,7 +138,8 @@ export function habitRate(logs: DailyLog[], h: HabitDef, today: string, days: nu
 export function compoundSeries(
   logs: DailyLog[],
   today: string,
-  days: number
+  days: number,
+  habits: HabitDef[] = HABITS,
 ): { date: string; cumulative: number; daily: number }[] {
   const byDate = new Map(logs.map((l) => [l.date, l]));
   const out: { date: string; cumulative: number; daily: number }[] = [];
@@ -135,7 +147,7 @@ export function compoundSeries(
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(today, -i);
     const log = byDate.get(d);
-    const daily = HABITS.filter((h) => habitHit(log, h)).length;
+    const daily = habits.filter((h) => habitHit(log, h)).length;
     cumulative += daily;
     out.push({ date: d, cumulative, daily });
   }

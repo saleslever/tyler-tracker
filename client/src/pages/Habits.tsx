@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { DailyLog } from "@shared/schema";
 import {
-  HABITS,
+  useHabits,
   habitHit,
   dayScore,
   addDays as addDaysAnalytics,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/analytics";
 import { useToday } from "@/hooks/useToday";
 import { PageHeader } from "@/components/PageHeader";
-import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2 } from "lucide-react";
+import { Check, Flame, Volume2, VolumeX, ChevronLeft, ChevronRight, Calendar, Undo2, Trash2, Plus, Settings, X, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playSound, useMuteState, haptic } from "@/hooks/useSound";
 
@@ -259,7 +259,8 @@ export default function Habits() {
     },
   });
 
-  const score = dayScore(viewLog);
+  const habits = useHabits();
+  const score = dayScore(viewLog, habits);
 
   // Precompute per-habit streak + 30d rate in a SINGLE pass over the last 30 days.
   // Previously each row rebuilt its own Map — 20× the work.
@@ -271,7 +272,7 @@ export default function Habits() {
     for (let i = 0; i < 30; i++) dates30.push(addDaysAnalytics(today, -i));
     const yesterdayStr = addDaysAnalytics(today, -1);
 
-    for (const h of HABITS) {
+    for (const h of habits) {
       // 30d rate
       let hits = 0;
       for (const d of dates30) {
@@ -291,7 +292,7 @@ export default function Habits() {
       stats.set(h.key, { streak, rate30: hits / 30 });
     }
     return stats;
-  }, [byDate, today]);
+  }, [byDate, today, habits]);
 
   const [muted, setMutedState] = useMuteState();
 
@@ -331,8 +332,11 @@ export default function Habits() {
     }
   }
 
+  const [manageOpen, setManageOpen] = useState(false);
+
   return (
     <div className="max-w-4xl mx-auto px-6 md:px-10 py-6 md:py-10">
+      {manageOpen && <ManageHabitsSheet onClose={() => setManageOpen(false)} habits={habits} />}
       <PageHeader
         title="Daily Habits"
         subtitle={formatDateLabel(viewDate, today)}
@@ -421,8 +425,19 @@ export default function Habits() {
         />
       </div>
 
+      <div className="flex items-center justify-between mb-3">
+        <div className="microlabel text-muted-foreground">Habits</div>
+        <button
+          onClick={() => setManageOpen(true)}
+          className="h-8 px-3 rounded border border-border hover:border-foreground/50 text-xs uppercase tracking-wider flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="btn-manage-habits"
+        >
+          <Settings className="w-3.5 h-3.5" /> Manage
+        </button>
+      </div>
+
       <div className="card-lux px-6">
-        {HABITS.map((h) => {
+        {habits.map((h) => {
           const stats = habitStats.get(h.key)!;
           const rawValue = viewLog ? ((viewLog as any)[h.key] ?? null) : null;
           const hit = habitHit(viewLog, h);
@@ -467,4 +482,272 @@ function wasNumericHit(habit: HabitDef, raw: any): boolean {
   if (Number.isNaN(v)) return false;
   if (habit.goalDirection === "lte") return v <= habit.goal;
   return v >= habit.goal;
+}
+
+// ============================================================================
+// Manage Habits sheet — add / edit / delete / reorder
+// ============================================================================
+function ManageHabitsSheet({ onClose, habits }: { onClose: () => void; habits: HabitDef[] }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<HabitDef | null>(null);
+
+  const createHabit = useMutation({
+    mutationFn: async (data: Partial<HabitDef>) => {
+      return await apiRequest("POST", "/api/habits", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      setShowAdd(false);
+    },
+  });
+
+  const updateHabit = useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<HabitDef> }) => {
+      return await apiRequest("PATCH", `/api/habits/${id}`, patch);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      setEditing(null);
+    },
+  });
+
+  const deleteHabit = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/habits/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/habits"] }),
+  });
+
+  const reorder = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("POST", "/api/habits/reorder", { ids });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/habits"] }),
+  });
+
+  function move(idx: number, delta: number) {
+    const next = [...habits];
+    const j = idx + delta;
+    if (j < 0 || j >= next.length) return;
+    [next[idx], next[j]] = [next[j], next[idx]];
+    reorder.mutate(next.map((h) => h.id!).filter(Boolean));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto" data-testid="sheet-manage-habits">
+      <div className="max-w-2xl mx-auto px-6 md:px-10 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="microlabel text-muted-foreground">Settings</div>
+            <h2 className="serif text-2xl md:text-3xl mt-1">Manage Habits</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 rounded border border-border hover:border-foreground/50 flex items-center justify-center transition-colors"
+            data-testid="btn-close-manage"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <button
+          onClick={() => setShowAdd(true)}
+          className="w-full h-11 rounded border-2 border-dashed border-border hover:border-foreground/50 hover:text-foreground text-muted-foreground text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors mb-4"
+          data-testid="btn-add-habit"
+        >
+          <Plus className="w-4 h-4" /> Add new habit
+        </button>
+
+        {showAdd && <HabitEditor onSave={(d) => createHabit.mutate(d)} onCancel={() => setShowAdd(false)} saving={createHabit.isPending} />}
+
+        <div className="card-lux divide-y divide-border">
+          {habits.map((h, idx) => (
+            <div key={h.id ?? h.key} className="py-3 flex items-center gap-3" data-testid={`habit-manage-${h.key}`}>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => move(idx, -1)}
+                  disabled={idx === 0}
+                  className="w-6 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20"
+                  aria-label="Move up"
+                >↑</button>
+                <button
+                  onClick={() => move(idx, 1)}
+                  disabled={idx === habits.length - 1}
+                  className="w-6 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20"
+                  aria-label="Move down"
+                >↓</button>
+              </div>
+              <div className="text-2xl w-8 flex justify-center">{h.emoji ?? "•"}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{h.label}</div>
+                <div className="text-xs text-muted-foreground">
+                  {h.kind === "bool" ? "Yes / no" : `Number • ${h.goalDirection === "lte" ? "≤" : "≥"} ${h.goal ?? "—"}${h.unit ? " " + h.unit : ""}`}
+                  {h.builtin === 1 && <span className="ml-2 text-[10px] uppercase tracking-wider">• Built-in</span>}
+                </div>
+              </div>
+              <button
+                onClick={() => setEditing(h)}
+                className="h-8 px-2 rounded text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
+                data-testid={`btn-edit-${h.key}`}
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  const label = h.builtin === 1 ? `Hide “${h.label}”? (Built-ins keep their history and can be re-enabled later.)` : `Delete “${h.label}”? This removes it and all its logged values.`;
+                  if (window.confirm(label)) deleteHabit.mutate(h.id!);
+                }}
+                className="h-8 w-8 rounded flex items-center justify-center text-muted-foreground hover:text-destructive border border-transparent hover:border-destructive/60"
+                data-testid={`btn-delete-${h.key}`}
+                aria-label={h.builtin === 1 ? "Hide" : "Delete"}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {editing && (
+          <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md card-lux p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="serif text-lg">Edit “{editing.label}”</div>
+                <button onClick={() => setEditing(null)} className="text-muted-foreground hover:text-foreground" aria-label="Close"><X className="w-4 h-4" /></button>
+              </div>
+              <HabitEditor
+                initial={editing}
+                onSave={(d) => updateHabit.mutate({ id: editing.id!, patch: d })}
+                onCancel={() => setEditing(null)}
+                saving={updateHabit.isPending}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HabitEditor({ initial, onSave, onCancel, saving }: {
+  initial?: HabitDef;
+  onSave: (h: Partial<HabitDef>) => void;
+  onCancel: () => void;
+  saving?: boolean;
+}) {
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [kind, setKind] = useState<"bool" | "num">(initial?.kind ?? "bool");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? "");
+  const [goal, setGoal] = useState<string>(initial?.goal != null ? String(initial.goal) : "");
+  const [goalDirection, setGoalDirection] = useState<"gte" | "lte">(initial?.goalDirection ?? "gte");
+  const [unit, setUnit] = useState(initial?.unit ?? "");
+  const [hint, setHint] = useState(initial?.hint ?? "");
+
+  const isBuiltin = initial?.builtin === 1;
+
+  return (
+    <div className="card-lux p-4 mb-4 space-y-3" data-testid="habit-editor">
+      <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+        <input
+          value={emoji}
+          onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+          placeholder="🔥"
+          className="h-10 rounded bg-secondary/50 border border-border text-center text-xl focus:outline-none focus:border-foreground/50"
+          data-testid="input-habit-emoji"
+          aria-label="Emoji"
+        />
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Habit name (e.g. No Nicotine)"
+          className="h-10 rounded bg-secondary/50 border border-border px-3 text-sm focus:outline-none focus:border-foreground/50"
+          data-testid="input-habit-label"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setKind("bool")}
+          disabled={isBuiltin}
+          className={cn("flex-1 h-9 rounded border text-xs uppercase tracking-wider", kind === "bool" ? "border-foreground text-foreground" : "border-border text-muted-foreground", isBuiltin && "opacity-50")}
+          data-testid="btn-kind-bool"
+        >Yes / No</button>
+        <button
+          onClick={() => setKind("num")}
+          disabled={isBuiltin}
+          className={cn("flex-1 h-9 rounded border text-xs uppercase tracking-wider", kind === "num" ? "border-foreground text-foreground" : "border-border text-muted-foreground", isBuiltin && "opacity-50")}
+          data-testid="btn-kind-num"
+        >Number</button>
+      </div>
+
+      {kind === "num" && (
+        <div className="grid grid-cols-[1fr_80px_1fr] gap-2">
+          <div>
+            <div className="microlabel mb-1">Direction</div>
+            <div className="flex gap-1">
+              <button onClick={() => setGoalDirection("gte")} className={cn("flex-1 h-9 rounded border text-xs", goalDirection === "gte" ? "border-foreground" : "border-border text-muted-foreground")}>≥ Goal</button>
+              <button onClick={() => setGoalDirection("lte")} className={cn("flex-1 h-9 rounded border text-xs", goalDirection === "lte" ? "border-foreground" : "border-border text-muted-foreground")}>≤ Goal</button>
+            </div>
+          </div>
+          <div>
+            <div className="microlabel mb-1">Goal</div>
+            <input
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              inputMode="decimal"
+              className="w-full h-9 rounded bg-secondary/50 border border-border px-2 text-sm text-center focus:outline-none focus:border-foreground/50"
+              data-testid="input-habit-goal"
+            />
+          </div>
+          <div>
+            <div className="microlabel mb-1">Unit</div>
+            <input
+              value={unit}
+              onChange={(e) => setUnit(e.target.value.slice(0, 8))}
+              placeholder="hrs, lb, bpm"
+              className="w-full h-9 rounded bg-secondary/50 border border-border px-2 text-sm focus:outline-none focus:border-foreground/50"
+              data-testid="input-habit-unit"
+            />
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="microlabel mb-1">Hint (optional)</div>
+        <input
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          placeholder="Short description"
+          className="w-full h-9 rounded bg-secondary/50 border border-border px-3 text-sm focus:outline-none focus:border-foreground/50"
+          data-testid="input-habit-hint"
+        />
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={onCancel}
+          className="flex-1 h-10 rounded border border-border text-sm uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          data-testid="btn-cancel-habit"
+        >Cancel</button>
+        <button
+          onClick={() => {
+            if (!label.trim()) return;
+            const payload: Partial<HabitDef> = {
+              label: label.trim(),
+              kind,
+              emoji: emoji.trim() || null,
+              hint: hint.trim() || null,
+              goal: kind === "num" && goal !== "" ? Number(goal) : null,
+              goalDirection: kind === "num" ? goalDirection : null,
+              unit: kind === "num" ? (unit.trim() || null) : null,
+            };
+            onSave(payload);
+          }}
+          disabled={!label.trim() || !!saving}
+          className="flex-1 h-10 rounded bg-foreground text-background text-sm uppercase tracking-wider font-medium disabled:opacity-50"
+          data-testid="btn-save-habit"
+        >{saving ? "Saving…" : (initial ? "Save" : "Create")}</button>
+      </div>
+    </div>
+  );
 }

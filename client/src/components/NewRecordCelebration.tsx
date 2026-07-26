@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { DailyLog, BossSeal, Record_ } from "@shared/schema";
-import { HABITS, habitHit, addDays } from "@/lib/analytics";
+import { useHabits, habitHit, addDays } from "@/lib/analytics";
 import { xpBetween } from "@/lib/xp";
 import { playSound, haptic } from "@/hooks/useSound";
 import { Fleuron } from "./Ornament";
@@ -50,6 +50,7 @@ export function NewRecordCelebration({ logs, seals }: Props) {
   });
 
   const today = new Date().toISOString().slice(0, 10);
+  const habits = useHabits();
 
   // Compute candidates.
   const candidates = useMemo(() => {
@@ -93,7 +94,7 @@ export function NewRecordCelebration({ logs, seals }: Props) {
     let mostHabitsDay = 0;
     for (const l of logs) {
       let n = 0;
-      for (const h of HABITS) if (habitHit(l, h)) n++;
+      for (const h of habits) if (habitHit(l, h)) n++;
       if (n > mostHabitsDay) mostHabitsDay = n;
     }
 
@@ -132,7 +133,7 @@ export function NewRecordCelebration({ logs, seals }: Props) {
       most_lifts_week: mostLiftsWeek,
       most_habits_day: mostHabitsDay,
     } as Record<string, number>;
-  }, [logs, seals, today]);
+  }, [logs, seals, today, habits]);
 
   // Push updates whenever a candidate exceeds the stored value.
   // Only fire the ceremony when the PRIOR value was > 0 (i.e. a genuine

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, Fast } from "@shared/schema";
 import { PageHeader } from "@/components/PageHeader";
 import {
-  HABITS,
+  useHabits,
   dayScore,
   habitRate,
   currentStreak,
@@ -26,7 +26,8 @@ export default function Analytics() {
   const { data: fasts = [] } = useQuery<Fast[]>({ queryKey: ["/api/fasts"] });
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
 
-  const compound = useMemo(() => compoundSeries(logs, today, range), [logs, today, range]);
+  const habits = useHabits();
+  const compound = useMemo(() => compoundSeries(logs, today, range, habits), [logs, today, range, habits]);
 
   const weekly = useMemo(() => {
     const out: { label: string; date: string; pct: number }[] = [];
@@ -35,10 +36,10 @@ export default function Analytics() {
       const log = logs.find((l) => l.date === d);
       const [y, m, dd] = d.split("-").map(Number);
       const label = new Date(y, m - 1, dd).toLocaleDateString("en-US", { weekday: "short" });
-      out.push({ label, date: d, pct: Math.round(dayScore(log) * 100) });
+      out.push({ label, date: d, pct: Math.round(dayScore(log, habits) * 100) });
     }
     return out;
-  }, [logs, today]);
+  }, [logs, today, habits]);
 
   // Year-view heatmap: 30x variable — go with last 91 days (13 weeks × 7)
   const heatmap = useMemo(() => {
@@ -46,10 +47,10 @@ export default function Analytics() {
     const cells: { date: string; score: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = addDays(today, -i);
-      cells.push({ date: d, score: dayScore(logs.find((l) => l.date === d)) });
+      cells.push({ date: d, score: dayScore(logs.find((l) => l.date === d), habits) });
     }
     return cells;
-  }, [logs, today]);
+  }, [logs, today, habits]);
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 md:px-10 py-6 md:py-10">
@@ -173,7 +174,7 @@ export default function Analytics() {
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {HABITS.map((h) => {
+          {habits.map((h) => {
             const rate = habitRate(logs, h, today, 30);
             const streak = currentStreak(logs, h, today);
             return (

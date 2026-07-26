@@ -6,6 +6,7 @@ import crestMark from "@assets/crest_mark.png";
 import { useToday } from "@/hooks/useToday";
 import {
   HABITS,
+  useHabits,
   habitHit,
   dayScore,
   overallStreak,
@@ -67,11 +68,12 @@ function MorningHero({
   const ydayLog = logs.find((l) => l.date === yesterday);
 
   // Sobriety streak (No Alcohol habit)
-  const noAlcohol = HABITS.find((h) => h.key === "noAlcohol")!;
+  const habits = useHabits();
+  const noAlcohol = habits.find((h) => h.key === "noAlcohol") ?? HABITS.find((h) => h.key === "noAlcohol")!;
   const sober = currentStreak(logs, noAlcohol, today);
 
   // Overall discipline streak
-  const streak = overallStreak(logs, today);
+  const streak = overallStreak(logs, today, 0.7, habits);
 
   // Challenge day + perfect streak
   const rollup = useMemo(
@@ -300,11 +302,12 @@ function YesterdayVerdict({
 }) {
   const yesterday = addDays(today, -1);
   const ydayLog = logs.find((l) => l.date === yesterday);
-  const score = dayScore(ydayLog);
+  const habits = useHabits();
+  const score = dayScore(ydayLog, habits);
   const daily = challenge ? requiredDailyHabits(challenge) : [];
 
-  const hitsList = HABITS.filter((h) => habitHit(ydayLog, h));
-  const missList = HABITS.filter(
+  const hitsList = habits.filter((h) => habitHit(ydayLog, h));
+  const missList = habits.filter(
     (h) => !habitHit(ydayLog, h) && (daily.includes(h.key as any) || h.kind === "bool"),
   ).slice(0, 5);
 
@@ -452,7 +455,7 @@ function WeekChain({
               const h = HABITS.find((x) => x.key === k)!;
               return habitHit(log, h);
             }));
-          const partial = !perfect && log && dayScore(log) >= 0.5;
+          const partial = !perfect && log && dayScore(log, habits) >= 0.5;
           const isToday = d === today;
           const isFuture = d > today;
           const dow = new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
@@ -1321,7 +1324,8 @@ function DailyIndicatorsTable({
   today: string;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, -6 + i));
-  const habitsToShow = HABITS.filter((h) => h.key !== "sleepScore"); // sleepScore rarely tracked
+  const allHabits = useHabits();
+  const habitsToShow = allHabits.filter((h) => h.key !== "sleepScore"); // sleepScore rarely tracked
 
   function label(dStr: string) {
     const d = new Date(dStr + "T00:00:00");
@@ -1420,18 +1424,19 @@ function ThirtyDaySummary({
   logs: DailyLog[];
   today: string;
 }) {
-  const rate30 = completionRate(logs, today, 30);
-  const rate7 = completionRate(logs, today, 7);
+  const habits = useHabits();
+  const rate30 = completionRate(logs, today, 30, habits);
+  const rate7 = completionRate(logs, today, 7, habits);
 
   // Perfect days = day score >= 90%
   const perfectDays = useMemo(() => {
     let c = 0;
     for (let i = 0; i < 30; i++) {
       const l = logs.find((x) => x.date === addDays(today, -i));
-      if (l && dayScore(l) >= 0.9) c++;
+      if (l && dayScore(l, habits) >= 0.9) c++;
     }
     return c;
-  }, [logs, today]);
+  }, [logs, today, habits]);
 
   const workoutCount = useMemo(() => {
     let c = 0;
@@ -1552,7 +1557,8 @@ export default function MorningAlignment() {
   }, [challenges, today]);
 
   const todayLog = logs.find((l) => l.date === today);
-  const streak = overallStreak(logs, today);
+  const habits = useHabits();
+  const streak = overallStreak(logs, today, 0.7, habits);
 
   const whyRitual = rituals.find((r) => r.key === "why");
   const questionsRitual = rituals.find((r) => r.key === "questions");

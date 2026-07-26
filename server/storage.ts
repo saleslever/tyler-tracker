@@ -1,4 +1,4 @@
-import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals, moodLogs, fasts } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals, moodLogs, fasts, habitsDef, habitValues } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
@@ -9,6 +9,7 @@ import type {
   BossSeal, InsertBossSeal,
   MoodLog, InsertMoodLog,
   Fast, InsertFast,
+  HabitDefRow, InsertHabitDef, HabitValue, InsertHabitValue,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -206,6 +207,30 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_fasts_one_active
       ON fasts ((CASE WHEN ended_at IS NULL THEN 'active' ELSE 'closed_' || id::text END));
 
+    CREATE TABLE IF NOT EXISTS habits_def (
+      id SERIAL PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      goal DOUBLE PRECISION,
+      goal_direction TEXT,
+      unit TEXT,
+      hint TEXT,
+      emoji TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      builtin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS habit_values (
+      id SERIAL PRIMARY KEY,
+      date TEXT NOT NULL,
+      habit_key TEXT NOT NULL,
+      value DOUBLE PRECISION,
+      UNIQUE (date, habit_key)
+    );
+
     CREATE TABLE IF NOT EXISTS mood_logs (
       id SERIAL PRIMARY KEY,
       value INTEGER NOT NULL,
@@ -309,6 +334,43 @@ export async function ensureSchema() {
     }
   }
 
+  // Seed the 13 built-in habits on first boot. Keys MUST match the legacy
+  // daily_logs column names so the merged read layer picks them up.
+  const hab = await pool.query(`SELECT COUNT(*)::int AS n FROM habits_def`);
+  if (hab.rows[0].n === 0) {
+    const now = new Date().toISOString();
+    const seed: Array<{
+      key: string; label: string; kind: "bool" | "num";
+      goal?: number; goalDirection?: "gte" | "lte";
+      unit?: string; hint?: string; emoji?: string;
+    }> = [
+      { key: "lowCarb",         label: "Low Carb",           kind: "bool", hint: "< 50g net",  emoji: "🥩" },
+      { key: "fastingHours",    label: "Fasting",            kind: "num",  goal: 16,  goalDirection: "gte", unit: "hrs", emoji: "⏱" },
+      { key: "vitamins",        label: "Vitamins & Creatine",kind: "bool", emoji: "💊" },
+      { key: "water",           label: "1 Gallon Water",     kind: "bool", emoji: "💧" },
+      { key: "steps",           label: "Steps",              kind: "num",  goal: 10000, goalDirection: "gte", emoji: "👟" },
+      { key: "workout",         label: "Lift Weights",       kind: "bool", hint: "4x / week", emoji: "🏋" },
+      { key: "morningDrink",    label: "Morning Drink",      kind: "bool", emoji: "🥤" },
+      { key: "sleepHours",      label: "Sleep Hours",        kind: "num",  goal: 7,   goalDirection: "gte", unit: "hrs", emoji: "🛌" },
+      { key: "sleepScore",      label: "Sleep Score",        kind: "num",  goal: 90,  goalDirection: "gte", emoji: "🌙" },
+      { key: "restingHeartRate",label: "Resting HR",         kind: "num",  goal: 60,  goalDirection: "lte", unit: "bpm", emoji: "❤️" },
+      { key: "weight",          label: "Weight",             kind: "num",  goal: 200, goalDirection: "lte", unit: "lb", emoji: "⚖" },
+      { key: "noAlcohol",       label: "No Alcohol",         kind: "bool", emoji: "🚫🍺" },
+      { key: "noEnergyDrinks",  label: "No Energy Drinks",   kind: "bool", emoji: "🚫⚡" },
+    ];
+    let pos = 0;
+    for (const s of seed) {
+      await pool.query(
+        `INSERT INTO habits_def
+           (key, label, kind, goal, goal_direction, unit, hint, emoji, position, active, builtin, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,1,$10)
+         ON CONFLICT (key) DO NOTHING`,
+        [s.key, s.label, s.kind, s.goal ?? null, s.goalDirection ?? null,
+         s.unit ?? null, s.hint ?? null, s.emoji ?? null, pos++, now],
+      );
+    }
+  }
+
   // Seed default records on first boot.
   const rec = await pool.query(`SELECT COUNT(*)::int AS n FROM records`);
   if (rec.rows[0].n === 0) {
@@ -380,29 +442,99 @@ export interface IStorage {
   createFast(f: InsertFast): Promise<Fast>;
   updateFast(id: number, patch: Partial<Fast>): Promise<Fast | undefined>;
   deleteFast(id: number): Promise<void>;
+  // Habits
+  getHabits(): Promise<HabitDefRow[]>;
+  createHabit(h: InsertHabitDef): Promise<HabitDefRow>;
+  updateHabit(id: number, patch: Partial<HabitDefRow>): Promise<HabitDefRow | undefined>;
+  deleteHabit(id: number): Promise<void>;
+  reorderHabits(orderedIds: number[]): Promise<void>;
+  // Habit values (only used for custom — non-legacy — habit keys)
+  upsertHabitValue(date: string, habitKey: string, value: number | null): Promise<void>;
   // Reset
   resetAll(): Promise<void>;
 }
 
+// Legacy daily_logs columns — these keys write to daily_logs directly.
+// Any other habit key writes to habit_values.
+const LEGACY_HABIT_KEYS = new Set<string>([
+  "fastingHours", "weight", "sleepScore", "sleepHours", "restingHeartRate",
+  "steps", "water", "vitamins", "morningDrink", "noAlcohol",
+  "noEnergyDrinks", "workout", "lowCarb",
+]);
+
 export class DatabaseStorage implements IStorage {
+  /** Merge per-date habit_values into a daily_log row. */
+  private async mergeHabitValues(log: DailyLog | undefined): Promise<DailyLog | undefined> {
+    if (!log) return log;
+    const vals = await db.select().from(habitValues).where(eq(habitValues.date, log.date));
+    const enriched: any = { ...log };
+    for (const v of vals) enriched[v.habitKey] = v.value;
+    return enriched as DailyLog;
+  }
+
+  private async mergeHabitValuesMany(logs: DailyLog[]): Promise<DailyLog[]> {
+    if (logs.length === 0) return logs;
+    const dates = logs.map((l) => l.date);
+    const vals = await db.select().from(habitValues).where(sql`date = ANY(${dates})`);
+    // Group by date
+    const byDate = new Map<string, HabitValue[]>();
+    for (const v of vals) {
+      if (!byDate.has(v.date)) byDate.set(v.date, []);
+      byDate.get(v.date)!.push(v);
+    }
+    return logs.map((l) => {
+      const enriched: any = { ...l };
+      const vs = byDate.get(l.date);
+      if (vs) for (const v of vs) enriched[v.habitKey] = v.value;
+      return enriched as DailyLog;
+    });
+  }
+
   async getLog(date: string) {
     const rows = await db.select().from(dailyLogs).where(eq(dailyLogs.date, date));
-    return rows[0];
+    return this.mergeHabitValues(rows[0]);
   }
-  async upsertLog(date: string, patch: Partial<InsertDailyLog>) {
-    const existing = await this.getLog(date);
-    if (existing) {
-      const rows = await db.update(dailyLogs).set(patch).where(eq(dailyLogs.date, date)).returning();
-      return rows[0];
+  async upsertLog(date: string, patch: Partial<InsertDailyLog> & Record<string, any>) {
+    // Split incoming patch: legacy keys → daily_logs, custom keys → habit_values.
+    const legacy: Record<string, any> = {};
+    const custom: Array<[string, number | null]> = [];
+    for (const [k, v] of Object.entries(patch)) {
+      if (LEGACY_HABIT_KEYS.has(k) || k === "cheatDay" || k === "gratitude1" || k === "gratitude3" || k === "gratitudePossession" || k === "date") {
+        legacy[k] = v;
+      } else {
+        custom.push([k, v == null ? null : Number(v)]);
+      }
     }
-    const rows = await db.insert(dailyLogs).values({ date, ...patch }).returning();
-    return rows[0];
+
+    // Upsert legacy row (even if only custom — we still need a daily_logs row to hang the date on).
+    const existing = (await db.select().from(dailyLogs).where(eq(dailyLogs.date, date)))[0];
+    let row: DailyLog;
+    if (existing) {
+      if (Object.keys(legacy).length > 0) {
+        const rows = await db.update(dailyLogs).set(legacy).where(eq(dailyLogs.date, date)).returning();
+        row = rows[0];
+      } else {
+        row = existing;
+      }
+    } else {
+      const rows = await db.insert(dailyLogs).values({ date, ...legacy }).returning();
+      row = rows[0];
+    }
+
+    // Upsert custom habit_values.
+    for (const [k, v] of custom) {
+      await this.upsertHabitValue(date, k, v);
+    }
+
+    return (await this.mergeHabitValues(row))!;
   }
   async getAllLogs() {
-    return db.select().from(dailyLogs);
+    const logs = await db.select().from(dailyLogs);
+    return this.mergeHabitValuesMany(logs);
   }
   async deleteLog(date: string) {
     await db.delete(dailyLogs).where(eq(dailyLogs.date, date));
+    await db.delete(habitValues).where(eq(habitValues.date, date));
   }
 
   async getTasks() {
@@ -669,6 +801,59 @@ export class DatabaseStorage implements IStorage {
     await db.delete(fasts).where(eq(fasts.id, id));
   }
 
+  // -------- Habits --------
+  async getHabits() {
+    return db.select().from(habitsDef).orderBy(habitsDef.position);
+  }
+  async createHabit(h: InsertHabitDef) {
+    const rows = await db.insert(habitsDef).values({
+      ...h,
+      createdAt: new Date().toISOString(),
+    }).returning();
+    return rows[0];
+  }
+  async updateHabit(id: number, patch: Partial<HabitDefRow>) {
+    // Never allow changing the key of a builtin (would break legacy column linkage)
+    const existing = (await db.select().from(habitsDef).where(eq(habitsDef.id, id)))[0];
+    if (existing?.builtin === 1 && patch.key && patch.key !== existing.key) {
+      delete (patch as any).key;
+    }
+    const rows = await db.update(habitsDef).set(patch).where(eq(habitsDef.id, id)).returning();
+    return rows[0];
+  }
+  async deleteHabit(id: number) {
+    const existing = (await db.select().from(habitsDef).where(eq(habitsDef.id, id)))[0];
+    if (!existing) return;
+    // Builtins can be soft-deleted (active=0) but never truly deleted so
+    // legacy history stays intact.
+    if (existing.builtin === 1) {
+      await db.update(habitsDef).set({ active: 0 }).where(eq(habitsDef.id, id));
+    } else {
+      await db.delete(habitsDef).where(eq(habitsDef.id, id));
+      await db.delete(habitValues).where(eq(habitValues.habitKey, existing.key));
+    }
+  }
+  async reorderHabits(orderedIds: number[]) {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(habitsDef).set({ position: i }).where(eq(habitsDef.id, orderedIds[i]));
+    }
+  }
+  async upsertHabitValue(date: string, habitKey: string, value: number | null) {
+    // If the key is legacy, forbid — legacy keys write via daily_logs.
+    if (LEGACY_HABIT_KEYS.has(habitKey)) return;
+    const existing = await db.select().from(habitValues)
+      .where(sql`date = ${date} AND habit_key = ${habitKey}`);
+    if (existing[0]) {
+      if (value == null) {
+        await db.delete(habitValues).where(eq(habitValues.id, existing[0].id));
+      } else {
+        await db.update(habitValues).set({ value }).where(eq(habitValues.id, existing[0].id));
+      }
+    } else if (value != null) {
+      await db.insert(habitValues).values({ date, habitKey, value });
+    }
+  }
+
   async resetAll() {
     const now = new Date().toISOString();
     await db.delete(dailyLogs);
@@ -679,6 +864,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(bossSeals);
     await db.delete(moodLogs);
     await db.delete(fasts);
+    await db.delete(habitValues);
+    // Keep habits_def — the seed reseeds it, but we clear per-day values.
+    // Actually clear custom habits too so the app returns to default state.
+    await db.delete(habitsDef);
     // Nuke quest history so the Trophy Hall is clean
     await db.delete(questCompletions);
     // Drop every quest, then reseed the tier-1 originals so the app never
@@ -696,6 +885,35 @@ export class DatabaseStorage implements IStorage {
       await db.insert(quests).values({
         key: s.key, title: s.title, subtitle: s.subtitle, motto: s.motto, icon: s.icon, tone: s.tone,
         metric: s.metric, goal: s.goal, xpReward: s.xp, progress: 0, tier: 1, family: s.family, active: 1, updatedAt: now,
+      });
+    }
+    // Reseed the built-in habits so the app returns to a working default state.
+    const habitSeed: Array<{
+      key: string; label: string; kind: "bool" | "num";
+      goal?: number; goalDirection?: "gte" | "lte";
+      unit?: string; hint?: string; emoji?: string;
+    }> = [
+      { key: "lowCarb",         label: "Low Carb",           kind: "bool", hint: "< 50g net",  emoji: "🥩" },
+      { key: "fastingHours",    label: "Fasting",            kind: "num",  goal: 16,  goalDirection: "gte", unit: "hrs", emoji: "⏱" },
+      { key: "vitamins",        label: "Vitamins & Creatine",kind: "bool", emoji: "💊" },
+      { key: "water",           label: "1 Gallon Water",     kind: "bool", emoji: "💧" },
+      { key: "steps",           label: "Steps",              kind: "num",  goal: 10000, goalDirection: "gte", emoji: "👟" },
+      { key: "workout",         label: "Lift Weights",       kind: "bool", hint: "4x / week", emoji: "🏋" },
+      { key: "morningDrink",    label: "Morning Drink",      kind: "bool", emoji: "🥤" },
+      { key: "sleepHours",      label: "Sleep Hours",        kind: "num",  goal: 7,   goalDirection: "gte", unit: "hrs", emoji: "🛌" },
+      { key: "sleepScore",      label: "Sleep Score",        kind: "num",  goal: 90,  goalDirection: "gte", emoji: "🌙" },
+      { key: "restingHeartRate",label: "Resting HR",         kind: "num",  goal: 60,  goalDirection: "lte", unit: "bpm", emoji: "❤️" },
+      { key: "weight",          label: "Weight",             kind: "num",  goal: 200, goalDirection: "lte", unit: "lb", emoji: "⚖" },
+      { key: "noAlcohol",       label: "No Alcohol",         kind: "bool", emoji: "🚫🍺" },
+      { key: "noEnergyDrinks",  label: "No Energy Drinks",   kind: "bool", emoji: "🚫⚡" },
+    ];
+    let pos = 0;
+    for (const s of habitSeed) {
+      await db.insert(habitsDef).values({
+        key: s.key, label: s.label, kind: s.kind,
+        goal: s.goal ?? null, goalDirection: s.goalDirection ?? null,
+        unit: s.unit ?? null, hint: s.hint ?? null, emoji: s.emoji ?? null,
+        position: pos++, active: 1, builtin: 1, createdAt: now,
       });
     }
     // Reset record values but keep the definitions
