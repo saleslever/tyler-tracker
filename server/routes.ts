@@ -246,5 +246,116 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
 
+  // -------- Fasts --------
+  // Helper: after a fast is closed (endedAt is set), autofill the day the fast
+  // ENDED on with the total duration in hours. If the same day already has a
+  // fasting_hours value, take the max so a manual entry doesn't shrink an
+  // auto-tracked value (and vice versa).
+  async function autofillFastingHours(startedAt: string, endedAt: string) {
+    const start = new Date(startedAt);
+    const end = new Date(endedAt);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return;
+    const hours = (end.getTime() - start.getTime()) / 3600000;
+    // Local YYYY-MM-DD of the day the fast ended (that's when the user "gets credit")
+    const y = end.getFullYear();
+    const m = String(end.getMonth() + 1).padStart(2, "0");
+    const d = String(end.getDate()).padStart(2, "0");
+    const date = `${y}-${m}-${d}`;
+    const existing = await storage.getLog(date);
+    const prior = existing?.fastingHours ?? 0;
+    const next = Math.max(prior, Math.round(hours * 10) / 10); // 1 decimal
+    await storage.upsertLog(date, { fastingHours: next });
+  }
+
+  app.get("/api/fasts", async (_req, res) => res.json(await storage.getFasts()));
+  app.get("/api/fasts/active", async (_req, res) => {
+    res.json((await storage.getActiveFast()) ?? null);
+  });
+
+  const startFastS = z.object({
+    goalHours: z.number().positive().max(72).optional(),
+    startedAt: z.string().optional(),
+    notes: z.string().optional().nullable(),
+  });
+  app.post("/api/fasts/start", async (req, res) => {
+    try {
+      const p = startFastS.parse(req.body ?? {});
+      const active = await storage.getActiveFast();
+      if (active) {
+        // Idempotent: return the current active fast rather than 400-ing.
+        return res.json(active);
+      }
+      const fast = await storage.createFast({
+        startedAt: p.startedAt ?? new Date().toISOString(),
+        endedAt: null,
+        goalHours: p.goalHours ?? 18,
+        notes: p.notes ?? null,
+        manual: 0,
+      });
+      res.json(fast);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  const endFastS = z.object({ endedAt: z.string().optional() });
+  app.post("/api/fasts/:id/end", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const p = endFastS.parse(req.body ?? {});
+      const endedAt = p.endedAt ?? new Date().toISOString();
+      const updated = await storage.updateFast(id, { endedAt });
+      if (!updated) return res.status(404).json({ error: "Fast not found" });
+      await autofillFastingHours(updated.startedAt, endedAt);
+      res.json(updated);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  // Manual entry: create a completed fast (both start + end)
+  const manualFastS = z.object({
+    startedAt: z.string(),
+    endedAt: z.string(),
+    goalHours: z.number().positive().max(72).optional(),
+    notes: z.string().optional().nullable(),
+  });
+  app.post("/api/fasts", async (req, res) => {
+    try {
+      const p = manualFastS.parse(req.body);
+      if (new Date(p.endedAt) <= new Date(p.startedAt)) {
+        return res.status(400).json({ error: "End must be after start" });
+      }
+      const fast = await storage.createFast({
+        startedAt: p.startedAt,
+        endedAt: p.endedAt,
+        goalHours: p.goalHours ?? 18,
+        notes: p.notes ?? null,
+        manual: 1,
+      });
+      await autofillFastingHours(p.startedAt, p.endedAt);
+      res.json(fast);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  const patchFastS = z.object({
+    startedAt: z.string().optional(),
+    endedAt: z.string().optional().nullable(),
+    goalHours: z.number().positive().max(72).optional(),
+    notes: z.string().optional().nullable(),
+  });
+  app.patch("/api/fasts/:id", async (req, res) => {
+    try {
+      const p = patchFastS.parse(req.body);
+      const updated = await storage.updateFast(Number(req.params.id), p as any);
+      if (!updated) return res.status(404).json({ error: "Fast not found" });
+      if (updated.endedAt) await autofillFastingHours(updated.startedAt, updated.endedAt);
+      res.json(updated);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
+  app.delete("/api/fasts/:id", async (req, res) => {
+    try {
+      await storage.deleteFast(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+
   return httpServer;
 }

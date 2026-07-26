@@ -260,3 +260,25 @@ export const moodLogs = pgTable("mood_logs", {
 export const insertMoodLogSchema = createInsertSchema(moodLogs).omit({ id: true });
 export type InsertMoodLog = z.infer<typeof insertMoodLogSchema>;
 export type MoodLog = typeof moodLogs.$inferSelect;
+
+/**
+ * Fasts — individual fasting sessions (start → end).
+ *
+ * Only one row may have endedAt = null at a time (the active fast).
+ *
+ * startedAt / endedAt are ISO timestamps.
+ * goalHours: target duration (used to draw the progress ring).
+ * manual: 1 if this row was created after the fact via the manual-entry
+ *         sheet, 0 if it was a live-tracked fast that ended naturally.
+ */
+export const fasts = pgTable("fasts", {
+  id: serial("id").primaryKey(),
+  startedAt: text("started_at").notNull(),
+  endedAt: text("ended_at"),
+  goalHours: doublePrecision("goal_hours").notNull().default(18),
+  notes: text("notes"),
+  manual: integer("manual").notNull().default(0),
+});
+export const insertFastSchema = createInsertSchema(fasts).omit({ id: true });
+export type InsertFast = z.infer<typeof insertFastSchema>;
+export type Fast = typeof fasts.$inferSelect;

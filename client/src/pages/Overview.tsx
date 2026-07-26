@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, Challenge, MoodLog } from "@shared/schema";
+import type { DailyLog, Task, Goal, Quest, QuestCompletion, BossSeal, Record_, Challenge, MoodLog, Fast } from "@shared/schema";
 import { useToday } from "@/hooks/useToday";
 import {
   HABITS,
@@ -20,7 +20,7 @@ import { XPBar } from "@/components/XPBar";
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, ArrowDownRight, Flame, CheckCircle2, Target as TargetIcon, Swords, Trophy, Award, HeartPulse } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Flame, CheckCircle2, Target as TargetIcon, Swords, Trophy, Award, HeartPulse, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { SobrietyCard } from "@/components/SobrietyCard";
@@ -58,6 +58,7 @@ export default function Overview() {
   const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
   const { data: completions = [] } = useQuery<QuestCompletion[]>({ queryKey: ["/api/quest-completions"] });
   const { data: moods = [] } = useQuery<MoodLog[]>({ queryKey: ["/api/moods"] });
+  const { data: activeFast } = useQuery<Fast | null>({ queryKey: ["/api/fasts/active"] });
 
   const [rangeIdx, setRangeIdx] = useState(1);
   const range = RANGES[rangeIdx];
@@ -156,6 +157,9 @@ export default function Overview() {
           </div>
         </div>
       </section>
+
+      {/* ==== FASTING WIDGET ==== */}
+      <FastingWidget fast={activeFast ?? null} rankColor={rp.rank.color} />
 
       {/* ==== TODAY'S MISSION ==== */}
       <section className="mb-8 rounded-sm border p-6" style={{ borderColor: "hsl(40 15% 22%)", background: "linear-gradient(160deg, #14100a 0%, #0a0908 100%)" }}>
@@ -502,3 +506,97 @@ function MoodMini({ moods }: { moods: MoodLog[] }) {
     </div>
   );
 }
+
+/* =============================================================
+   FASTING OVERVIEW WIDGET — compact card shown when either:
+   - there's an active fast: shows elapsed / goal + mini ring
+   - there's no active fast: subtle CTA to start one
+   ============================================================= */
+function FastingWidget({ fast, rankColor }: { fast: Fast | null; rankColor: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  const active = !!fast;
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active]);
+
+  if (!active) {
+    return (
+      <Link
+        href="/fasting"
+        className="mb-8 block rounded-sm border p-4 md:p-5 hover:bg-white/[0.02] transition-colors"
+        style={{ borderColor: "hsl(40 15% 22%)", background: "linear-gradient(160deg, #14100a 0%, #0a0908 100%)" }}
+        data-testid="card-fasting-widget-idle"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center border" style={{ borderColor: `${rankColor}55`, color: rankColor }}>
+            <Timer className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="microlabel opacity-70">Fasting</div>
+            <div className="serif text-base md:text-lg mt-0.5">Start your window</div>
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Tap →</div>
+        </div>
+      </Link>
+    );
+  }
+
+  const startedAt = new Date(fast!.startedAt).getTime();
+  const elapsedMs = Math.max(0, now - startedAt);
+  const elapsedH = elapsedMs / 3600000;
+  const goal = fast!.goalHours;
+  const pct = Math.min(1, elapsedH / goal);
+  const remainingH = Math.max(0, goal - elapsedH);
+  const past = elapsedH >= goal;
+
+  // Mini ring — 56px
+  const size = 56, stroke = 5, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const offset = c * (1 - pct);
+
+  return (
+    <Link
+      href="/fasting"
+      className="mb-8 block rounded-sm border p-4 md:p-5 hover:bg-white/[0.02] transition-colors"
+      style={{ borderColor: `${rankColor}55`, background: "linear-gradient(160deg, #14100a 0%, #0a0908 100%)" }}
+      data-testid="card-fasting-widget-active"
+    >
+      <div className="flex items-center gap-4">
+        <div className="relative" style={{ width: size, height: size }}>
+          <svg viewBox={`0 0 ${size} ${size}`} className="-rotate-90 w-full h-full">
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="hsl(40 10% 18%)" strokeWidth={stroke} />
+            <circle
+              cx={size/2} cy={size/2} r={r} fill="none"
+              stroke={rankColor}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={c}
+              strokeDashoffset={offset}
+              style={{ transition: "stroke-dashoffset 0.9s linear" }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold" style={{ color: rankColor }}>
+            {Math.round(pct * 100)}%
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="microlabel opacity-70">You're {past ? "past your" : "into your"} fast</div>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="num-display text-2xl md:text-3xl" style={{ color: rankColor }} data-testid="widget-elapsed">
+              {Math.floor(elapsedH)}<span className="text-xs opacity-80">h</span> {Math.floor((elapsedMs % 3600000) / 60000)}<span className="text-xs opacity-80">m</span>
+            </span>
+            <span className="text-xs text-muted-foreground">/ {goal}h goal</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {past
+              ? "Goal hit. Tap to end when ready."
+              : `${Math.floor(remainingH)}h ${Math.floor((remainingH - Math.floor(remainingH)) * 60)}m remaining`}
+          </div>
+        </div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground hidden sm:block">Open →</div>
+      </div>
+    </Link>
+  );
+}
+

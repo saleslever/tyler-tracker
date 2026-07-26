@@ -18,6 +18,7 @@ import {
   Swords,
   Crown,
   HeartPulse,
+  Timer,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
@@ -37,6 +38,7 @@ const NAV = [
     section: "Daily",
     items: [
       { href: "/habits", label: "Habits", icon: CheckSquare },
+      { href: "/fasting", label: "Fasting", icon: Timer },
       { href: "/challenge", label: "Challenge", icon: Trophy },
       { href: "/quests", label: "Quests", icon: Swords },
       { href: "/mood", label: "Mood", icon: HeartPulse },
@@ -173,8 +175,8 @@ export function Layout({ children }: { children: ReactNode }) {
           {[
             { href: "/", label: "Home", icon: LayoutDashboard },
             { href: "/habits", label: "Habits", icon: CheckSquare },
+            { href: "/fasting", label: "Fasting", icon: Timer },
             { href: "/mood", label: "Mood", icon: HeartPulse },
-            { href: "/journal", label: "Journal", icon: BookOpen },
             { href: "/analytics", label: "Stats", icon: BarChart3 },
           ].map((item) => {
             const Icon = item.icon;

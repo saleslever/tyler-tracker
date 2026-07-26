@@ -1,4 +1,4 @@
-import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals, moodLogs } from "@shared/schema";
+import { dailyLogs, tasks, journal, goals, challenges, rituals, quests, questCompletions, records, bossSeals, moodLogs, fasts } from "@shared/schema";
 import type {
   DailyLog, InsertDailyLog, Task, InsertTask,
   Journal, InsertJournal, Goal, InsertGoal,
@@ -8,6 +8,7 @@ import type {
   Record_, InsertRecord,
   BossSeal, InsertBossSeal,
   MoodLog, InsertMoodLog,
+  Fast, InsertFast,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -190,6 +191,21 @@ export async function ensureSchema() {
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS sleep_hours DOUBLE PRECISION;
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS resting_heart_rate INTEGER;
 
+    CREATE TABLE IF NOT EXISTS fasts (
+      id SERIAL PRIMARY KEY,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      goal_hours DOUBLE PRECISION NOT NULL DEFAULT 18,
+      notes TEXT,
+      manual INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_fasts_started_at ON fasts(started_at);
+    -- Only allow one active (open) fast at a time. COALESCE trick: all closed
+    -- fasts get a unique fake key (their id encoded), only the open one shares
+    -- the sentinel value 'active'.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fasts_one_active
+      ON fasts ((CASE WHEN ended_at IS NULL THEN 'active' ELSE 'closed_' || id::text END));
+
     CREATE TABLE IF NOT EXISTS mood_logs (
       id SERIAL PRIMARY KEY,
       value INTEGER NOT NULL,
@@ -358,6 +374,12 @@ export interface IStorage {
   getMoods(): Promise<MoodLog[]>;
   createMood(m: InsertMoodLog): Promise<MoodLog>;
   deleteMood(id: number): Promise<void>;
+  // Fasts
+  getFasts(): Promise<Fast[]>;
+  getActiveFast(): Promise<Fast | undefined>;
+  createFast(f: InsertFast): Promise<Fast>;
+  updateFast(id: number, patch: Partial<Fast>): Promise<Fast | undefined>;
+  deleteFast(id: number): Promise<void>;
   // Reset
   resetAll(): Promise<void>;
 }
@@ -627,6 +649,26 @@ export class DatabaseStorage implements IStorage {
     await db.delete(moodLogs).where(eq(moodLogs.id, id));
   }
 
+  // ============ Fasts ============
+  async getFasts() {
+    return db.select().from(fasts).orderBy(desc(fasts.startedAt));
+  }
+  async getActiveFast() {
+    const rows = await db.select().from(fasts).where(sql`ended_at IS NULL`).limit(1);
+    return rows[0];
+  }
+  async createFast(f: InsertFast) {
+    const rows = await db.insert(fasts).values({ ...f }).returning();
+    return rows[0];
+  }
+  async updateFast(id: number, patch: Partial<Fast>) {
+    const rows = await db.update(fasts).set(patch).where(eq(fasts.id, id)).returning();
+    return rows[0];
+  }
+  async deleteFast(id: number) {
+    await db.delete(fasts).where(eq(fasts.id, id));
+  }
+
   async resetAll() {
     const now = new Date().toISOString();
     await db.delete(dailyLogs);
@@ -636,6 +678,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(challenges);
     await db.delete(bossSeals);
     await db.delete(moodLogs);
+    await db.delete(fasts);
     // Nuke quest history so the Trophy Hall is clean
     await db.delete(questCompletions);
     // Drop every quest, then reseed the tier-1 originals so the app never

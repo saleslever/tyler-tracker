@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DailyLog } from "@shared/schema";
+import type { DailyLog, Fast } from "@shared/schema";
 import { PageHeader } from "@/components/PageHeader";
 import {
   HABITS,
@@ -15,7 +15,7 @@ import { useToday } from "@/hooks/useToday";
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar,
 } from "recharts";
-import { Flame } from "lucide-react";
+import { Flame, Timer, Trophy, TrendingDown, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const RANGES = [7, 30, 90] as const;
@@ -23,6 +23,7 @@ const RANGES = [7, 30, 90] as const;
 export default function Analytics() {
   const today = useToday();
   const { data: logs = [] } = useQuery<DailyLog[]>({ queryKey: ["/api/logs"] });
+  const { data: fasts = [] } = useQuery<Fast[]>({ queryKey: ["/api/fasts"] });
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
 
   const compound = useMemo(() => compoundSeries(logs, today, range), [logs, today, range]);
@@ -196,6 +197,164 @@ export default function Analytics() {
           })}
         </div>
       </section>
+
+      {/* ==== FASTING ANALYTICS ==== */}
+      <FastingAnalytics fasts={fasts} today={today} />
     </div>
+  );
+}
+
+/* =============================================================
+   FASTING ANALYTICS — avg / longest / shortest / success rate
+   + 30-day duration bars + current streak of days with a fast
+   ============================================================= */
+function FastingAnalytics({ fasts, today }: { fasts: Fast[]; today: string }) {
+  const closed = fasts.filter((f) => f.endedAt);
+
+  const { count, avg, longest, shortest, successPct } = useMemo(() => {
+    if (closed.length === 0) return { count: 0, avg: 0, longest: 0, shortest: 0, successPct: 0 };
+    const durs = closed.map((f) => (new Date(f.endedAt!).getTime() - new Date(f.startedAt).getTime()) / 3600000);
+    const successes = closed.filter((f) => {
+      const d = (new Date(f.endedAt!).getTime() - new Date(f.startedAt).getTime()) / 3600000;
+      return d >= f.goalHours;
+    }).length;
+    return {
+      count: durs.length,
+      avg: durs.reduce((a, b) => a + b, 0) / durs.length,
+      longest: Math.max(...durs),
+      shortest: Math.min(...durs),
+      successPct: Math.round((successes / durs.length) * 100),
+    };
+  }, [closed]);
+
+  // 30-day bars: for each day, sum of fast hours whose ENDED-date falls on that day
+  const bars = useMemo(() => {
+    const out: { label: string; date: string; hours: number; goal: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = addDays(today, -i);
+      const dayFasts = closed.filter((f) => {
+        const end = new Date(f.endedAt!);
+        const y = end.getFullYear();
+        const m = String(end.getMonth() + 1).padStart(2, "0");
+        const dd = String(end.getDate()).padStart(2, "0");
+        return `${y}-${m}-${dd}` === d;
+      });
+      const hours = dayFasts.reduce((sum, f) => sum + (new Date(f.endedAt!).getTime() - new Date(f.startedAt).getTime()) / 3600000, 0);
+      const goal = dayFasts.length > 0 ? Math.max(...dayFasts.map((f) => f.goalHours)) : 0;
+      const [y, m, dd] = d.split("-").map(Number);
+      const label = new Date(y, m - 1, dd).toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+      out.push({ label, date: d, hours: Math.round(hours * 10) / 10, goal });
+    }
+    return out;
+  }, [closed, today]);
+
+  // Streak of consecutive days ending in `today` that have at least one closed fast
+  const streak = useMemo(() => {
+    let s = 0;
+    for (let i = 0; ; i++) {
+      const d = addDays(today, -i);
+      const has = closed.some((f) => {
+        const end = new Date(f.endedAt!);
+        const y = end.getFullYear();
+        const m = String(end.getMonth() + 1).padStart(2, "0");
+        const dd = String(end.getDate()).padStart(2, "0");
+        return `${y}-${m}-${dd}` === d;
+      });
+      if (has) s += 1;
+      else break;
+      if (i > 500) break;
+    }
+    return s;
+  }, [closed, today]);
+
+  if (fasts.length === 0) {
+    return (
+      <section className="card-plain p-6 mt-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Timer className="w-4 h-4 text-muted-foreground" />
+          <div className="serif text-base">Fasting</div>
+        </div>
+        <div className="text-xs text-muted-foreground">No fasts logged yet. Start one from the Fasting tab — stats and trends will appear here.</div>
+      </section>
+    );
+  }
+
+  const maxBar = Math.max(24, ...bars.map((b) => b.hours));
+
+  const fmtDur = (h: number) => {
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    if (hh === 0) return `${mm}m`;
+    if (mm === 0) return `${hh}h`;
+    return `${hh}h ${mm}m`;
+  };
+
+  return (
+    <section className="card-plain p-6 mt-6">
+      <div className="mb-5 flex items-baseline justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Timer className="w-4 h-4 text-[#e0b74f]" />
+            <div className="serif text-base">Fasting</div>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">{count} fasts · {successPct}% goal-hit rate</div>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <Flame className="w-3.5 h-3.5 text-orange-400" />
+          <span className="text-muted-foreground">Streak</span>
+          <span className="num-display text-lg text-[#e0b74f]">{streak}</span>
+          <span className="text-muted-foreground">{streak === 1 ? "day" : "days"}</span>
+        </div>
+      </div>
+
+      {/* Stat tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="border border-border rounded p-4 bg-secondary/30">
+          <div className="flex items-center gap-1.5 text-muted-foreground mb-2"><Target className="w-3.5 h-3.5" /><div className="microlabel">Average</div></div>
+          <div className="num-display text-2xl">{fmtDur(avg)}</div>
+        </div>
+        <div className="border border-border rounded p-4 bg-secondary/30">
+          <div className="flex items-center gap-1.5 text-muted-foreground mb-2"><Trophy className="w-3.5 h-3.5" /><div className="microlabel">Longest</div></div>
+          <div className="num-display text-2xl text-[#e0b74f]">{fmtDur(longest)}</div>
+        </div>
+        <div className="border border-border rounded p-4 bg-secondary/30">
+          <div className="flex items-center gap-1.5 text-muted-foreground mb-2"><TrendingDown className="w-3.5 h-3.5" /><div className="microlabel">Shortest</div></div>
+          <div className="num-display text-2xl">{fmtDur(shortest)}</div>
+        </div>
+        <div className="border border-border rounded p-4 bg-secondary/30">
+          <div className="flex items-center gap-1.5 text-muted-foreground mb-2"><Timer className="w-3.5 h-3.5" /><div className="microlabel">Total Fasts</div></div>
+          <div className="num-display text-2xl">{count}</div>
+        </div>
+      </div>
+
+      {/* 30-day duration bars */}
+      <div className="mb-2 flex items-baseline justify-between">
+        <div className="microlabel">Last 30 days · duration</div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Gold = goal hit</div>
+      </div>
+      <div className="h-40 flex items-end gap-1">
+        {bars.map((b) => {
+          const h = b.hours > 0 ? Math.max(3, (b.hours / maxBar) * 100) : 0;
+          const hit = b.goal > 0 && b.hours >= b.goal;
+          return (
+            <div key={b.date} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+              <div
+                className={cn(
+                  "w-full rounded-t transition-all",
+                  hit ? "bg-[#e0b74f]" : b.hours > 0 ? "bg-foreground/60" : "bg-secondary"
+                )}
+                style={{ height: `${h}%` }}
+                title={`${b.label} · ${b.hours > 0 ? fmtDur(b.hours) : "no fast"}`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-[9px] text-muted-foreground">
+        <span>{bars[0]?.label}</span>
+        <span>{bars[Math.floor(bars.length / 2)]?.label}</span>
+        <span>{bars[bars.length - 1]?.label}</span>
+      </div>
+    </section>
   );
 }

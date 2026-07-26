@@ -15,6 +15,7 @@ import Challenge from "@/pages/Challenge";
 import Quests from "@/pages/Quests";
 import Milestones from "@/pages/Milestones";
 import MoodPage from "@/pages/Mood";
+import Fasting from "@/pages/Fasting";
 import NotFound from "@/pages/not-found";
 
 function AppRouter() {
@@ -32,6 +33,7 @@ function AppRouter() {
         <Route path="/quests" component={Quests} />
         <Route path="/milestones" component={Milestones} />
         <Route path="/mood" component={MoodPage} />
+        <Route path="/fasting" component={Fasting} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
