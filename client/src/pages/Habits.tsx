@@ -121,8 +121,26 @@ const HabitRow = memo(function HabitRow({
           )}
         </div>
       ) : (
-        <div className="shrink-0 w-9 h-9 rounded flex items-center justify-center border border-border text-base">
-          {habit.emoji}
+        <div className="relative shrink-0">
+          <div
+            className={cn(
+              "w-9 h-9 rounded flex items-center justify-center border transition-all text-base",
+              hit
+                ? "bg-foreground text-background border-foreground shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
+                : "bg-transparent border-border"
+            )}
+            data-testid={`num-hit-${habit.key}`}
+            aria-label={hit ? `${habit.label} goal hit` : habit.label}
+          >
+            {hit ? <Check className="w-4 h-4" strokeWidth={3} /> : habit.emoji}
+          </div>
+          {pulseKey > 0 && hit && (
+            <span
+              key={`pulse-num-${pulseKey}`}
+              className="pointer-events-none absolute inset-0 rounded ring-2 ring-amber-400/70 animate-habit-pulse"
+              aria-hidden="true"
+            />
+          )}
         </div>
       )}
 
@@ -150,11 +168,11 @@ const HabitRow = memo(function HabitRow({
           flush(str);
         };
         return (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center shrink-0 rounded border border-border bg-secondary/30 overflow-hidden">
             <button
               type="button"
               onClick={() => bump(-stepBig)}
-              className="w-8 h-9 rounded bg-secondary/40 border border-border text-sm text-muted-foreground active:bg-secondary/70"
+              className="w-7 h-9 text-sm text-muted-foreground hover:bg-secondary/50 active:bg-secondary/70"
               aria-label={`Decrease ${habit.label}`}
               data-testid={`dec-${habit.key}`}
             >−</button>
@@ -176,13 +194,13 @@ const HabitRow = memo(function HabitRow({
                 }
               }}
               placeholder="—"
-              className="w-20 h-9 text-right rounded bg-secondary/50 border border-border px-2 text-sm focus:outline-none focus:border-foreground/50"
+              className="w-14 h-9 text-center bg-transparent border-x border-border px-1 text-sm focus:outline-none focus:bg-secondary/50"
               data-testid={`input-${habit.key}`}
             />
             <button
               type="button"
               onClick={() => bump(stepBig)}
-              className="w-8 h-9 rounded bg-secondary/40 border border-border text-sm text-muted-foreground active:bg-secondary/70"
+              className="w-7 h-9 text-sm text-muted-foreground hover:bg-secondary/50 active:bg-secondary/70"
               aria-label={`Increase ${habit.label}`}
               data-testid={`inc-${habit.key}`}
             >+</button>
