@@ -21,8 +21,6 @@ import {
   recentConversation,
 } from "./coachStorage";
 import { askCoach, generateWorkout, extractFromImage } from "./coachEngine";
-import { db } from "./storage";
-import { sql } from "drizzle-orm";
 import {
   insertCoachSettingsSchema, insertCoachMemorySchema, insertCoachChecklistSchema,
   insertFitnessGoalSchema, insertBodyScanSchema, insertNutritionTargetSchema,
@@ -290,23 +288,6 @@ export function registerCoachRoutes(app: Express) {
     try {
       await discardUpload(Number(req.params.id));
       res.json({ ok: true });
-    } catch (e) { err(res, e); }
-  });
-
-  // ─── One-shot admin migrations ────────────────────────────
-  // Approved by user 2026-08-12: drop legacy gamification tables.
-  app.post("/api/admin/drop-gamification", async (req, res) => {
-    try {
-      const key = req.headers["x-admin-key"];
-      if (!process.env.ADMIN_KEY || key !== process.env.ADMIN_KEY) {
-        return res.status(401).json({ error: "unauthorized" });
-      }
-      await db.execute(sql`DROP TABLE IF EXISTS quest_completions CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS quests CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS challenges CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS boss_seals CASCADE`);
-      const remaining = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`);
-      res.json({ ok: true, remainingTables: (remaining as any).rows?.map((r: any) => r.table_name) ?? remaining });
     } catch (e) { err(res, e); }
   });
 
