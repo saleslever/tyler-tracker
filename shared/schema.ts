@@ -327,3 +327,10 @@ export const habitValues = pgTable("habit_values", {
 export const insertHabitValueSchema = createInsertSchema(habitValues).omit({ id: true });
 export type InsertHabitValue = z.infer<typeof insertHabitValueSchema>;
 export type HabitValue = typeof habitValues.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════════
+// FITNESS COACH OS — Data Center (M1)
+// See shared/schemaFitnessCoach.ts for full definitions.
+// ═══════════════════════════════════════════════════════════════
+export * from "./schemaFitnessCoach";
+
