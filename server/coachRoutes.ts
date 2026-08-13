@@ -42,9 +42,18 @@ export function registerCoachRoutes(app: Express) {
   // ─── Chat ─────────────────────────────────────────────────────
   app.post("/api/coach/chat", async (req, res) => {
     try {
-      const message = z.string().min(1).max(4000).parse(req.body?.message);
+      // Message required unless an image is attached (then a default prompt is used)
+      const rawMessage = typeof req.body?.message === "string" ? req.body.message : "";
+      const imageDataUrl = typeof req.body?.imageDataUrl === "string" ? req.body.imageDataUrl : undefined;
+      if (!rawMessage.trim() && !imageDataUrl) {
+        return res.status(400).json({ error: "message or imageDataUrl required" });
+      }
+      const message = z.string().max(4000).parse(rawMessage);
+      if (imageDataUrl && !imageDataUrl.startsWith("data:image/")) {
+        return res.status(400).json({ error: "imageDataUrl must be a data:image/... URL" });
+      }
       const ctx = await buildCoachContext();
-      const response = await askCoach(ctx, message);
+      const response = await askCoach(ctx, message, imageDataUrl);
       res.json(response);
     } catch (e) { err(res, e); }
   });

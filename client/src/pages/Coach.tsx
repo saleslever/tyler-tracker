@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Brain, Zap, AlertTriangle } from "lucide-react";
+import { Loader2, Send, Brain, Zap, AlertTriangle, Paperclip, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Conversation {
@@ -37,7 +37,10 @@ interface CoachContext {
 
 export default function Coach() {
   const [input, setInput] = useState("");
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [imageName, setImageName] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const conversationQuery = useQuery<Conversation[]>({
     queryKey: ["/api/coach/conversation"],
@@ -49,12 +52,17 @@ export default function Coach() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const res = await apiRequest("POST", "/api/coach/chat", { message });
+    mutationFn: async (payload: { message: string; imageDataUrl?: string | null }) => {
+      const body: any = { message: payload.message };
+      if (payload.imageDataUrl) body.imageDataUrl = payload.imageDataUrl;
+      const res = await apiRequest("POST", "/api/coach/chat", body);
       return res.json();
     },
     onSuccess: () => {
       setInput("");
+      setImageDataUrl(null);
+      setImageName(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["/api/coach/conversation"] });
       queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
       queryClient.invalidateQueries({ queryKey: ["/api/coach/memory"] });
@@ -69,8 +77,30 @@ export default function Coach() {
 
   function submit() {
     const trimmed = input.trim();
-    if (!trimmed || sendMutation.isPending) return;
-    sendMutation.mutate(trimmed);
+    if (sendMutation.isPending) return;
+    if (!trimmed && !imageDataUrl) return;
+    sendMutation.mutate({ message: trimmed, imageDataUrl });
+  }
+
+  async function handleFile(file: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Only images can be attached.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert("Image too large (15MB max).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        setImageDataUrl(result);
+        setImageName(file.name);
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
   const ctx = contextQuery.data;
@@ -150,7 +180,50 @@ export default function Coach() {
 
       {/* Input area */}
       <div className="border-t pt-4">
+        {imageDataUrl && (
+          <div className="mb-2 flex items-center gap-3 p-2 rounded-md bg-muted/60 border" data-testid="image-preview">
+            <img
+              src={imageDataUrl}
+              alt="attachment preview"
+              className="w-16 h-16 object-cover rounded"
+            />
+            <div className="flex-1 text-xs text-muted-foreground truncate">
+              {imageName ?? "Attached image"} — Coach will read this with your message.
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setImageDataUrl(null); setImageName(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+              data-testid="button-remove-image"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+            }}
+            data-testid="input-file-hidden"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="self-end"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendMutation.isPending}
+            data-testid="button-attach-image"
+            title="Attach a screenshot (MacroFactor, Whoop, body scan, workout, anything)"
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -160,7 +233,7 @@ export default function Coach() {
                 submit();
               }
             }}
-            placeholder="Ask, log, complain. Cmd/Ctrl+Enter to send."
+            placeholder={imageDataUrl ? "Add a note (optional) then send — Coach will read the image." : "Ask, log, complain, or attach a screenshot. Cmd/Ctrl+Enter to send."}
             rows={2}
             className="resize-none"
             disabled={sendMutation.isPending}
@@ -168,7 +241,7 @@ export default function Coach() {
           />
           <Button
             onClick={submit}
-            disabled={sendMutation.isPending || !input.trim()}
+            disabled={sendMutation.isPending || (!input.trim() && !imageDataUrl)}
             className="self-end"
             data-testid="button-send"
           >

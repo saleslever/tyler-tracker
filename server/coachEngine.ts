@@ -92,7 +92,10 @@ function parseDecisions(text: string): { prose: string; decisions?: any } {
   }
 }
 
-async function callClaude(systemPrompt: string, userMessages: { role: string; content: string }[]): Promise<string> {
+async function callClaude(
+  systemPrompt: string,
+  userMessages: { role: string; content: any }[],
+): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not set in environment");
@@ -130,14 +133,39 @@ async function callClaude(systemPrompt: string, userMessages: { role: string; co
  * Auto-applies memoryToAdd decisions (they're just user facts).
  * DOES NOT auto-apply workoutPlanToSet — user must confirm via a separate endpoint.
  */
-export async function askCoach(ctx: CoachContext, userMessage: string): Promise<CoachResponse> {
+export async function askCoach(
+  ctx: CoachContext,
+  userMessage: string,
+  imageDataUrl?: string,
+): Promise<CoachResponse> {
   const systemPrompt = buildSystemPrompt(ctx);
 
   // Build recent message history from stored turns
-  const history = ctx.recentTurns
+  const history: { role: string; content: any }[] = ctx.recentTurns
     .filter(t => t.role === "user" || t.role === "coach")
     .map(t => ({ role: t.role === "coach" ? "assistant" : "user", content: t.content }));
-  history.push({ role: "user", content: userMessage });
+
+  // Current user turn — mixed content if an image is attached
+  if (imageDataUrl) {
+    const match = imageDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+    if (match) {
+      const mediaType = match[1];
+      const b64 = match[2];
+      const textPart = userMessage.trim() ||
+        "I'm sending you a screenshot. Read the data, log what applies (macros, weight, body-fat, sleep, recovery, etc), and tell me what you found. If it's a workout screenshot, extract exercises. If it's a body scan and it has a daily calorie target, note it but do NOT overwrite my current target without confirmation.";
+      history.push({
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+          { type: "text", text: textPart },
+        ],
+      });
+    } else {
+      history.push({ role: "user", content: userMessage });
+    }
+  } else {
+    history.push({ role: "user", content: userMessage });
+  }
 
   // Snapshot the context we're about to reason from (audit trail)
   const contextSnapshot = {
@@ -152,11 +180,11 @@ export async function askCoach(ctx: CoachContext, userMessage: string): Promise<
     memoryCount: ctx.memory.length,
   };
 
-  // Log user turn first
+  // Log user turn first (record whether an image was attached so we have an audit trail)
   await logConversation({
     date: ctx.today,
     role: "user",
-    content: userMessage,
+    content: imageDataUrl ? `${userMessage}\n[image attached]` : userMessage,
     contextSnapshot,
     decisions: null as any,
     model: null as any,

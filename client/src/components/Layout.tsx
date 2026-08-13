@@ -31,8 +31,7 @@ const NAV = [
     items: [
       { href: "/coach", label: "Coach", icon: MessageSquare },
       { href: "/generate", label: "Generate Workout", icon: Zap },
-      { href: "/uploads", label: "Uploads", icon: UploadIcon },
-      { href: "/overview", label: "Overview", icon: LayoutDashboard },
+      { href: "/uploads", label: "Bulk Uploads", icon: UploadIcon },
     ],
   },
   {
@@ -48,9 +47,7 @@ const NAV = [
   {
     section: "Long Game",
     items: [
-      { href: "/alignment", label: "Morning Alignment", icon: Target },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/milestones", label: "Milestones", icon: Crown },
     ],
   },
   {
