@@ -45,7 +45,7 @@ function colorForValue(v: number): string {
   if (v <= 3) return "#c94848";
   if (v <= 5) return "#8a8578";
   if (v <= 7) return "#c9995a";
-  return "#e0b74f";
+  return "#B08D57";
 }
 
 function labelForValue(v: number): string {
@@ -162,7 +162,7 @@ export default function MoodPage() {
                 )}
                 style={{
                   borderColor: `${color}88`,
-                  background: `linear-gradient(160deg, ${color}18 0%, #0a0908 100%)`,
+                  background: `linear-gradient(160deg, ${color}18 0%, #0A0808 100%)`,
                 }}
                 data-testid={`mood-button-${v}`}
                 aria-label={`Log mood ${v} out of 10 — ${labelForValue(v)}`}
@@ -191,7 +191,7 @@ export default function MoodPage() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Optional note — what's going on? (attached to next tap)"
-            className="w-full rounded-sm border border-[#2a2a2a] bg-[#0a0908] px-4 py-2.5 text-sm outline-none transition-colors focus:border-[#e0b74f]"
+            className="w-full rounded-sm border border-[#1A1512] bg-[#0A0808] px-4 py-2.5 text-sm outline-none transition-colors focus:border-[#B08D57]"
             data-testid="input-mood-note"
             style={{ fontFamily: "'Inter', sans-serif" }}
           />
@@ -210,8 +210,8 @@ export default function MoodPage() {
                 className={cn(
                   "rounded-sm border px-3 py-1 text-[10px] uppercase tracking-[0.25em] transition-colors",
                   rangeIdx === i
-                    ? "border-[#e0b74f] text-[#e0b74f]"
-                    : "border-[#2a2a2a] opacity-60 hover:opacity-100",
+                    ? "border-[#B08D57] text-[#B08D57]"
+                    : "border-[#1A1512] opacity-60 hover:opacity-100",
                 )}
                 style={{ fontFamily: "'Inter', sans-serif" }}
                 data-testid={`mood-range-${r.label}`}
@@ -231,7 +231,7 @@ export default function MoodPage() {
         </div>
 
         <div
-          className="rounded-sm border border-[#2a2a2a] bg-[#0a0908] p-4"
+          className="rounded-sm border border-[#1A1512] bg-[#0A0808] p-4"
           style={{ height: 360 }}
           data-testid="mood-chart"
         >
@@ -244,8 +244,8 @@ export default function MoodPage() {
               <AreaChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }}>
                 <defs>
                   <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#e0b74f" stopOpacity={0.45} />
-                    <stop offset="100%" stopColor="#e0b74f" stopOpacity={0.03} />
+                    <stop offset="0%" stopColor="#B08D57" stopOpacity={0.45} />
+                    <stop offset="100%" stopColor="#B08D57" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="#1e1e1e" vertical={false} />
@@ -270,7 +270,7 @@ export default function MoodPage() {
                 <Tooltip
                   contentStyle={{
                     background: "#111",
-                    border: "1px solid #2a2a2a",
+                    border: "1px solid #1A1512",
                     borderRadius: 2,
                     fontFamily: "'Inter', sans-serif",
                     fontSize: 12,
@@ -281,11 +281,11 @@ export default function MoodPage() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#e0b74f"
+                  stroke="#B08D57"
                   strokeWidth={2}
                   fill="url(#moodFill)"
-                  dot={{ r: 3, fill: "#e0b74f", stroke: "#0a0908", strokeWidth: 1 }}
-                  activeDot={{ r: 5, fill: "#e0b74f", stroke: "#0a0908", strokeWidth: 2 }}
+                  dot={{ r: 3, fill: "#B08D57", stroke: "#0A0808", strokeWidth: 1 }}
+                  activeDot={{ r: 5, fill: "#B08D57", stroke: "#0A0808", strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -301,7 +301,7 @@ export default function MoodPage() {
             No mood logs yet.
           </div>
         ) : (
-          <div className="rounded-sm border border-[#2a2a2a] divide-y divide-[#1a1a1a]" data-testid="mood-list">
+          <div className="rounded-sm border border-[#1A1512] divide-y divide-[#1a1a1a]" data-testid="mood-list">
             {recent.map((m) => {
               const color = colorForValue(m.value);
               return (
@@ -311,7 +311,7 @@ export default function MoodPage() {
                     style={{
                       borderColor: color,
                       color,
-                      background: "#0a0908",
+                      background: "#0A0808",
                       fontFamily: "'Inter', sans-serif",
                     }}
                   >
@@ -354,7 +354,7 @@ export default function MoodPage() {
 
 function MoodStat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) {
   return (
-    <div className="rounded-sm border border-[#2a2a2a] bg-[#0a0908] px-4 py-3">
+    <div className="rounded-sm border border-[#1A1512] bg-[#0A0808] px-4 py-3">
       <div className="microlabel">{label}</div>
       <div
         className="num-display text-2xl leading-none mt-1.5"

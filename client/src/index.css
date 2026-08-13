@@ -1,16 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400..900;1,400..900&family=Inter:wght@400..800&family=JetBrains+Mono:wght@500..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@400..800&family=JetBrains+Mono:wght@500..700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* Tyler Tracker — Fitness Coach OS
- * Design DNA: Compass (warm cream, data-first oversized numerals, generous whitespace)
- * blended with Clark Legacy Trading (near-black + gold accent, tracked-out caps, 10px radii).
- * Two themes: light (Compass) and dark (Clark).
+ * Design DNA: Obsidian Sparta.
+ * Dark: onyx canvas, blood red primary, bronze accents.
+ * Light: ivory parchment, charcoal ink, blood red primary, antique bronze accents.
+ * Heavy display serif (Fraunces) for headings + hero numbers.
+ * Modern luxury × Spartan heroic × Ironman/Jarvis command deck.
  */
 
-/* Light theme (Compass DNA) — default */
+/* Light theme — Ivory Parchment */
 :root {
   --button-outline: rgba(0, 0, 0, 0.06);
   --badge-outline: rgba(0, 0, 0, 0.05);
@@ -18,60 +20,61 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.06);
 
-  /* Warm cream base — Compass-style */
-  --background: 36 40% 96%;         /* #FBF6EE cream */
-  --foreground: 24 20% 12%;         /* #211D18 espresso */
-  --border: 30 25% 88%;
+  /* Ivory parchment base */
+  --background: 36 30% 94%;         /* #F5F1EA ivory */
+  --foreground: 20 15% 10%;         /* #1A1512 deep charcoal */
+  --border: 30 15% 84%;
 
-  --card: 36 45% 98%;               /* #FDF9F2 slightly lighter card */
-  --card-foreground: 24 20% 12%;
-  --card-border: 30 22% 86%;
+  --card: 36 40% 97%;               /* #FAF7F1 warm paper */
+  --card-foreground: 20 15% 10%;
+  --card-border: 30 12% 82%;
 
-  --sidebar: 36 45% 94%;            /* warm sidebar */
-  --sidebar-foreground: 24 20% 15%;
-  --sidebar-border: 30 22% 85%;
-  --sidebar-primary: 24 20% 12%;
-  --sidebar-primary-foreground: 36 45% 98%;
-  --sidebar-accent: 42 35% 88%;
-  --sidebar-accent-foreground: 24 20% 12%;
-  --sidebar-ring: 42 60% 50%;
+  --sidebar: 36 25% 91%;
+  --sidebar-foreground: 20 15% 15%;
+  --sidebar-border: 30 12% 80%;
+  --sidebar-primary: 353 62% 43%;   /* blood red for active nav */
+  --sidebar-primary-foreground: 36 40% 97%;
+  --sidebar-accent: 30 20% 88%;
+  --sidebar-accent-foreground: 20 15% 12%;
+  --sidebar-ring: 353 62% 43%;
 
-  --popover: 36 45% 98%;
-  --popover-foreground: 24 20% 12%;
-  --popover-border: 30 22% 85%;
+  --popover: 36 40% 97%;
+  --popover-foreground: 20 15% 10%;
+  --popover-border: 30 12% 80%;
 
-  /* Gold accent — Clark Legacy Trading */
-  --primary: 42 65% 48%;            /* #C9A335 rich gold */
-  --primary-foreground: 24 20% 10%;
+  /* Blood red primary */
+  --primary: 353 62% 43%;           /* #B02938 blood red */
+  --primary-foreground: 36 40% 97%;
 
-  --secondary: 30 30% 90%;
-  --secondary-foreground: 24 20% 15%;
+  --secondary: 30 20% 90%;
+  --secondary-foreground: 20 15% 15%;
 
-  --muted: 30 25% 92%;
-  --muted-foreground: 24 12% 40%;
+  --muted: 30 15% 90%;
+  --muted-foreground: 20 8% 40%;
 
-  --accent: 42 65% 48%;
-  --accent-foreground: 24 20% 10%;
+  /* Antique bronze accent */
+  --accent: 36 39% 39%;             /* #8B6F3E antique bronze */
+  --accent-foreground: 36 40% 97%;
 
-  --destructive: 8 65% 50%;
-  --destructive-foreground: 36 45% 98%;
+  --destructive: 353 62% 43%;
+  --destructive-foreground: 36 40% 97%;
 
-  --input: 30 22% 82%;
-  --ring: 42 65% 48%;
+  --input: 30 12% 78%;
+  --ring: 353 62% 43%;
 
-  /* Chart palette — earth + gold */
-  --chart-1: 42 65% 48%;   /* gold */
-  --chart-2: 24 30% 45%;   /* warm brown */
-  --chart-3: 145 40% 40%;  /* jungle green */
-  --chart-4: 8 55% 55%;    /* clay red */
-  --chart-5: 200 30% 45%;  /* cool slate */
+  /* Chart palette */
+  --chart-1: 353 62% 43%;   /* blood red */
+  --chart-2: 36 39% 39%;    /* antique bronze */
+  --chart-3: 20 15% 25%;    /* charcoal */
+  --chart-4: 353 40% 60%;   /* muted red */
+  --chart-5: 36 25% 55%;    /* warm gray-bronze */
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: "Fraunces", "Cinzel", Georgia, serif;
   --font-serif: "Fraunces", Georgia, serif;
-  --font-numeric: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 0.625rem;               /* 10px — CLT rhythm */
+  --font-numeric: "Fraunces", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
 
   --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.04);
   --shadow: 0 4px 12px -2px rgba(0,0,0,0.06);
@@ -81,7 +84,7 @@
   --shadow-2xl: 0 40px 80px -30px rgba(0,0,0,0.15);
 }
 
-/* Dark theme (Clark Legacy Trading DNA) */
+/* Dark theme — Obsidian War Room */
 .dark {
   --button-outline: rgba(255, 255, 255, 0.06);
   --badge-outline: rgba(255, 255, 255, 0.05);
@@ -89,56 +92,60 @@
   --elevate-1: rgba(255, 255, 255, 0.03);
   --elevate-2: rgba(255, 255, 255, 0.06);
 
-  --background: 230 12% 6%;         /* #08090C near black */
-  --foreground: 42 25% 88%;         /* warm cream on black */
-  --border: 230 8% 14%;
+  /* Obsidian onyx canvas */
+  --background: 0 12% 4%;           /* #0A0808 onyx */
+  --foreground: 36 20% 92%;         /* warm ivory on black */
+  --border: 0 8% 12%;
 
-  --card: 230 10% 8%;               /* #10121A elevated card */
-  --card-foreground: 42 25% 88%;
-  --card-border: 230 8% 15%;
+  --card: 0 10% 6%;                 /* #110E0E elevated card */
+  --card-foreground: 36 20% 92%;
+  --card-border: 0 8% 14%;
 
-  --sidebar: 230 12% 5%;
-  --sidebar-foreground: 42 20% 82%;
-  --sidebar-border: 230 8% 12%;
-  --sidebar-primary: 42 65% 55%;
-  --sidebar-primary-foreground: 230 12% 6%;
-  --sidebar-accent: 230 10% 12%;
-  --sidebar-accent-foreground: 42 25% 88%;
-  --sidebar-ring: 42 65% 55%;
+  --sidebar: 0 12% 3%;
+  --sidebar-foreground: 36 15% 82%;
+  --sidebar-border: 0 8% 11%;
+  --sidebar-primary: 355 76% 56%;   /* blood red brightened for dark */
+  --sidebar-primary-foreground: 0 12% 4%;
+  --sidebar-accent: 0 10% 10%;
+  --sidebar-accent-foreground: 36 20% 92%;
+  --sidebar-ring: 355 76% 56%;
 
-  --popover: 230 10% 9%;
-  --popover-foreground: 42 25% 88%;
-  --popover-border: 230 8% 15%;
+  --popover: 0 10% 7%;
+  --popover-foreground: 36 20% 92%;
+  --popover-border: 0 8% 15%;
 
-  --primary: 42 65% 55%;            /* #E6C757 CLT gold */
-  --primary-foreground: 230 12% 6%;
+  /* Blood red primary (brightened) */
+  --primary: 355 76% 56%;           /* #E63946 blood red */
+  --primary-foreground: 0 12% 4%;
 
-  --secondary: 230 10% 14%;
-  --secondary-foreground: 42 25% 85%;
+  --secondary: 0 10% 13%;
+  --secondary-foreground: 36 20% 88%;
 
-  --muted: 230 10% 12%;
-  --muted-foreground: 42 8% 58%;
+  --muted: 0 10% 11%;
+  --muted-foreground: 36 8% 60%;
 
-  --accent: 42 65% 55%;
-  --accent-foreground: 230 12% 6%;
+  /* Bronze accent — burnished */
+  --accent: 36 34% 52%;             /* #B08D57 bronze */
+  --accent-foreground: 0 12% 4%;
 
-  --destructive: 8 65% 55%;
-  --destructive-foreground: 42 25% 95%;
+  --destructive: 355 76% 56%;
+  --destructive-foreground: 36 20% 95%;
 
-  --input: 230 8% 20%;
-  --ring: 42 65% 55%;
+  --input: 0 8% 18%;
+  --ring: 355 76% 56%;
 
-  --chart-1: 42 65% 55%;
-  --chart-2: 42 30% 60%;
-  --chart-3: 145 40% 55%;
-  --chart-4: 8 55% 60%;
-  --chart-5: 200 30% 55%;
+  /* Chart palette — bronze + red on obsidian */
+  --chart-1: 355 76% 56%;   /* blood red */
+  --chart-2: 36 34% 52%;    /* bronze */
+  --chart-3: 36 20% 75%;    /* platinum */
+  --chart-4: 355 50% 40%;   /* deep red */
+  --chart-5: 36 15% 45%;    /* muted bronze */
 
-  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.4);
-  --shadow: 0 4px 12px -2px rgba(0,0,0,0.5);
-  --shadow-md: 0 8px 24px -4px rgba(0,0,0,0.6);
-  --shadow-lg: 0 20px 40px -10px rgba(0,0,0,0.7);
-  --shadow-xl: 0 30px 60px -20px rgba(0,0,0,0.8);
+  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.5);
+  --shadow: 0 4px 12px -2px rgba(0,0,0,0.6);
+  --shadow-md: 0 8px 24px -4px rgba(0,0,0,0.7);
+  --shadow-lg: 0 20px 40px -10px rgba(0,0,0,0.8);
+  --shadow-xl: 0 30px 60px -20px rgba(0,0,0,0.85);
   --shadow-2xl: 0 40px 80px -30px rgba(0,0,0,0.9);
 }
 
@@ -160,20 +167,21 @@
 }
 
 @layer components {
-  /* Tracked-out caps — the CLT signature. Repurposed .serif class. */
+  /* Tracked-out caps — Spartan HUD label */
   .serif {
     font-family: var(--font-sans);
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
+    color: hsl(var(--muted-foreground));
   }
   .serif-hero {
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: -0.02em;
-    line-height: 1.05;
-    font-size: clamp(1.75rem, 3vw, 2.5rem);
+    line-height: 1.02;
+    font-size: clamp(2rem, 4.5vw, 3.75rem);
   }
   .serif-italic {
     font-family: var(--font-display);
@@ -182,74 +190,105 @@
     letter-spacing: -0.01em;
   }
 
-  /* Data-first oversized numerals (Compass DNA). Used for weight, streaks, macros. */
+  /* Sculpted numerals — Fraunces heavy serif for hero, JetBrains mono for tabular data */
   .num-display {
-    font-family: var(--font-numeric);
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum", "zero";
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum", "lnum";
     letter-spacing: -0.03em;
-    font-weight: 700;
+    font-weight: 800;
   }
   .num-huge {
-    font-family: var(--font-numeric);
-    font-variant-numeric: tabular-nums;
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum", "lnum";
     letter-spacing: -0.04em;
-    font-weight: 700;
-    font-size: clamp(2.5rem, 8vw, 4.5rem);
-    line-height: 1;
+    font-weight: 800;
+    font-size: clamp(3rem, 10vw, 6rem);
+    line-height: 0.95;
+  }
+  .num-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "zero";
+    letter-spacing: -0.01em;
+    font-weight: 600;
   }
 
-  /* Ornamental section separator */
+  /* Spartan ornament separator */
   .ornament {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     color: hsl(var(--muted-foreground));
-    font-size: 11px;
-    letter-spacing: 0.25em;
+    font-size: 10px;
+    letter-spacing: 0.28em;
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: 700;
   }
   .ornament::before, .ornament::after {
     content: '';
     height: 1px;
-    width: 24px;
-    background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.5), transparent);
+    width: 32px;
+    background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.6), transparent);
   }
 
-  /* Clean cards — Compass style */
+  /* Clean cards */
   .card-plain {
     background: hsl(var(--card));
     border: 1px solid hsl(var(--card-border));
     border-radius: var(--radius);
   }
 
-  /* Warm hero panel */
+  /* HUD panel — the Obsidian Sparta hero container */
   .hero-panel {
     background:
-      radial-gradient(ellipse 60% 90% at 50% 40%, hsl(var(--primary) / 0.08), transparent 65%),
+      radial-gradient(ellipse 70% 90% at 50% 30%, hsl(var(--primary) / 0.08), transparent 60%),
       linear-gradient(180deg, hsl(var(--card)), hsl(var(--background)));
-    border: 1px solid hsl(var(--primary) / 0.2);
+    border: 1px solid hsl(var(--primary) / 0.22);
     border-radius: 14px;
     position: relative;
     overflow: hidden;
     box-shadow:
-      0 20px 50px -20px hsl(var(--primary) / 0.15),
-      inset 0 1px 0 hsl(var(--primary) / 0.1);
-  }
-  .hero-panel::before {
-    content: none;  /* legacy overlay disabled */
+      0 20px 50px -20px hsl(var(--primary) / 0.25),
+      inset 0 1px 0 hsl(var(--primary) / 0.12);
   }
 
-  /* Gold accent utility */
-  .gold {
-    color: hsl(var(--primary));
+  /* Atlas HUD frame — the video container on Coach page */
+  .atlas-frame {
+    position: relative;
+    border-radius: 999px;
+    overflow: hidden;
+    background: radial-gradient(circle at center, hsl(0 12% 8%), hsl(0 12% 2%));
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.35),
+      0 0 40px hsl(var(--primary) / 0.25),
+      inset 0 0 60px hsl(0 0% 0% / 0.6);
   }
-  .gold-border {
-    border-color: hsl(var(--primary) / 0.3);
+  .atlas-frame[data-thinking="true"] {
+    animation: atlas-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes atlas-pulse {
+    0%, 100% {
+      box-shadow:
+        0 0 0 1px hsl(var(--primary) / 0.35),
+        0 0 30px hsl(var(--primary) / 0.20),
+        inset 0 0 60px hsl(0 0% 0% / 0.6);
+    }
+    50% {
+      box-shadow:
+        0 0 0 2px hsl(var(--primary) / 0.85),
+        0 0 80px hsl(var(--primary) / 0.55),
+        inset 0 0 60px hsl(0 0% 0% / 0.6);
+    }
   }
 
-  /* Coach message bubble variants */
+  /* Red accent utilities */
+  .accent-red { color: hsl(var(--primary)); }
+  .accent-bronze { color: hsl(var(--accent)); }
+  .border-accent-red { border-color: hsl(var(--primary) / 0.3); }
+
+  /* Coach message bubble */
   .coach-bubble {
     background: hsl(var(--card));
     border: 1px solid hsl(var(--card-border));
@@ -257,8 +296,14 @@
     border-radius: var(--radius);
     padding: 0.875rem 1rem;
   }
+  .user-bubble {
+    background: hsl(var(--primary) / 0.12);
+    border: 1px solid hsl(var(--primary) / 0.25);
+    border-radius: var(--radius);
+    padding: 0.875rem 1rem;
+  }
 
-  /* Ledger tile — for /generate page */
+  /* Ledger tile */
   .ledger-tile {
     background: hsl(var(--card));
     border: 1px solid hsl(var(--card-border));
@@ -270,15 +315,15 @@
     border-color: hsl(var(--primary) / 0.5);
   }
   .ledger-tile[data-deficit="true"] {
-    border-color: hsl(var(--destructive) / 0.4);
-    background: hsl(var(--destructive) / 0.04);
+    border-color: hsl(var(--primary) / 0.4);
+    background: hsl(var(--primary) / 0.04);
   }
   .ledger-tile[data-hit="true"] {
-    border-color: hsl(var(--primary) / 0.4);
-    background: hsl(var(--primary) / 0.06);
+    border-color: hsl(var(--accent) / 0.5);
+    background: hsl(var(--accent) / 0.08);
   }
 
-  /* Red badge for nagging (missed checklist items) */
+  /* Nag badge */
   .nag-badge {
     display: inline-flex;
     align-items: center;
@@ -286,8 +331,8 @@
     min-width: 1.25rem;
     height: 1.25rem;
     padding: 0 0.375rem;
-    background: hsl(var(--destructive));
-    color: hsl(var(--destructive-foreground));
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
     font-size: 0.6875rem;
     font-weight: 700;
     border-radius: 999px;
@@ -298,6 +343,40 @@
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.08); opacity: 0.9; }
   }
+
+  /* Scan-line HUD grid overlay */
+  .hud-grid {
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Legacy aliases — remap old warm-gold classes to Obsidian Sparta so pages
+   * that still reference .card-lux or .gold don't break. */
+  .card-lux {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--card-border));
+    border-radius: var(--radius);
+  }
+  .gold {
+    color: hsl(var(--primary));
+  }
+
+  /* Etched HUD stat card */
+  .hud-stat {
+    background: linear-gradient(180deg, hsl(var(--card) / 0.6), hsl(var(--card) / 0.2));
+    border: 1px solid hsl(var(--primary) / 0.15);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    backdrop-filter: blur(8px);
+    position: relative;
+  }
+  .hud-stat::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent);
+  }
 }
-
-

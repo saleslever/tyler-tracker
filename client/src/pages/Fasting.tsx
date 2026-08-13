@@ -209,7 +209,7 @@ export default function Fasting() {
               {active && (
                 <button
                   onClick={() => setStartEditOpen(true)}
-                  className="mt-1 text-[10px] uppercase tracking-widest text-[#e0b74f] hover:underline"
+                  className="mt-1 text-[10px] uppercase tracking-widest text-[#B08D57] hover:underline"
                   data-testid="btn-edit-start"
                 >
                   Edit start
@@ -226,7 +226,7 @@ export default function Fasting() {
               {active && (
                 <button
                   onClick={() => { setPendingGoal(goalHours); setGoalPickerOpen(true); }}
-                  className="mt-1 text-[10px] uppercase tracking-widest text-[#e0b74f] hover:underline"
+                  className="mt-1 text-[10px] uppercase tracking-widest text-[#B08D57] hover:underline"
                   data-testid="btn-edit-goal"
                 >
                   Edit {goalHours}h goal
@@ -241,7 +241,7 @@ export default function Fasting() {
               <button
                 onClick={endFast}
                 disabled={busy}
-                className="w-full py-4 rounded-md bg-[#e0b74f] hover:bg-[#f0c85f] text-black font-semibold uppercase tracking-[0.2em] text-sm transition-colors disabled:opacity-60"
+                className="w-full py-4 rounded-md bg-[#B08D57] hover:bg-[#C9A063] text-black font-semibold uppercase tracking-[0.2em] text-sm transition-colors disabled:opacity-60"
                 data-testid="btn-end-fast"
               >
                 End Fast
@@ -250,7 +250,7 @@ export default function Fasting() {
               <button
                 onClick={() => { setPendingGoal(18); setGoalPickerOpen(true); }}
                 disabled={busy}
-                className="w-full py-4 rounded-md bg-[#e0b74f] hover:bg-[#f0c85f] text-black font-semibold uppercase tracking-[0.2em] text-sm transition-colors disabled:opacity-60"
+                className="w-full py-4 rounded-md bg-[#B08D57] hover:bg-[#C9A063] text-black font-semibold uppercase tracking-[0.2em] text-sm transition-colors disabled:opacity-60"
                 data-testid="btn-start-fast"
               >
                 Start Fasting
@@ -281,7 +281,7 @@ export default function Fasting() {
                 key={s.label}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-sm border transition-colors",
-                  isActive ? "border-[#e0b74f] bg-[#e0b74f]/10" : "border-border"
+                  isActive ? "border-[#B08D57] bg-[#B08D57]/10" : "border-border"
                 )}
                 data-testid={`legend-${s.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
@@ -309,7 +309,7 @@ export default function Fasting() {
               const hit = dur >= f.goalHours;
               return (
                 <div key={f.id} className="flex items-center gap-3 py-2.5" data-testid={`fast-row-${f.id}`}>
-                  <div className={cn("w-1 h-8 rounded-full", hit ? "bg-[#e0b74f]" : "bg-muted-foreground/40")} />
+                  <div className={cn("w-1 h-8 rounded-full", hit ? "bg-[#B08D57]" : "bg-muted-foreground/40")} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold">{fmtDuration(dur)} <span className="text-muted-foreground text-xs font-normal">/ {f.goalHours}h goal{f.manual === 1 ? " · manual" : ""}</span></div>
                     <div className="text-[11px] text-muted-foreground truncate">{fmtWhen(f.startedAt)} → {fmtWhen(f.endedAt!)}</div>
@@ -343,7 +343,7 @@ export default function Fasting() {
                 className={cn(
                   "py-3 rounded-md border text-sm font-semibold transition-colors",
                   pendingGoal === h
-                    ? "border-[#e0b74f] bg-[#e0b74f]/10 text-[#e0b74f]"
+                    ? "border-[#B08D57] bg-[#B08D57]/10 text-[#B08D57]"
                     : "border-border hover:border-foreground/40"
                 )}
                 data-testid={`btn-goal-${h}`}
@@ -362,7 +362,7 @@ export default function Fasting() {
             <button
               onClick={() => (active ? editGoal(pendingGoal) : startFast(pendingGoal))}
               disabled={busy}
-              className="h-9 px-4 rounded bg-[#e0b74f] text-black text-sm font-semibold hover:bg-[#f0c85f] disabled:opacity-60"
+              className="h-9 px-4 rounded bg-[#B08D57] text-black text-sm font-semibold hover:bg-[#C9A063] disabled:opacity-60"
               data-testid="btn-confirm-goal"
             >
               {active ? "Update goal" : `Start ${pendingGoal}h fast`}
@@ -399,7 +399,7 @@ function StatTile({ label, value, icon, accent }: { label: string; value: string
         {icon}
         <div className="microlabel">{label}</div>
       </div>
-      <div className={cn("num-display text-2xl mt-2", accent && "text-[#e0b74f]")}>{value}</div>
+      <div className={cn("num-display text-2xl mt-2", accent && "text-[#B08D57]")}>{value}</div>
     </div>
   );
 }
@@ -519,7 +519,7 @@ function EditStartDialog({
           <button
             onClick={() => onSave(val)}
             disabled={busy || !val}
-            className="h-9 px-4 rounded bg-[#e0b74f] text-black text-sm font-semibold hover:bg-[#f0c85f] disabled:opacity-60"
+            className="h-9 px-4 rounded bg-[#B08D57] text-black text-sm font-semibold hover:bg-[#C9A063] disabled:opacity-60"
             data-testid="btn-save-start"
           >
             Save
@@ -596,7 +596,7 @@ function ManualEntryDialog({ open, onClose, onSaved }: { open: boolean; onClose:
                   onClick={() => setGoal(h)}
                   className={cn(
                     "py-2 rounded-md border text-sm font-semibold transition-colors",
-                    goal === h ? "border-[#e0b74f] bg-[#e0b74f]/10 text-[#e0b74f]" : "border-border hover:border-foreground/40"
+                    goal === h ? "border-[#B08D57] bg-[#B08D57]/10 text-[#B08D57]" : "border-border hover:border-foreground/40"
                   )}
                 >
                   {h}h
@@ -606,7 +606,7 @@ function ManualEntryDialog({ open, onClose, onSaved }: { open: boolean; onClose:
           </div>
           {durH > 0 && (
             <div className="text-center text-xs text-muted-foreground pt-2">
-              Duration: <span className="text-[#e0b74f] font-semibold">{fmtDuration(durH)}</span>
+              Duration: <span className="text-[#B08D57] font-semibold">{fmtDuration(durH)}</span>
             </div>
           )}
         </div>
@@ -615,7 +615,7 @@ function ManualEntryDialog({ open, onClose, onSaved }: { open: boolean; onClose:
           <button
             onClick={save}
             disabled={busy || durH <= 0}
-            className="h-9 px-4 rounded bg-[#e0b74f] text-black text-sm font-semibold hover:bg-[#f0c85f] disabled:opacity-60"
+            className="h-9 px-4 rounded bg-[#B08D57] text-black text-sm font-semibold hover:bg-[#C9A063] disabled:opacity-60"
             data-testid="btn-save-manual"
           >
             Save
