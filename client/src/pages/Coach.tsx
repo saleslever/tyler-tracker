@@ -76,39 +76,49 @@ export default function Coach() {
   const ctx = contextQuery.data;
   const messages = conversationQuery.data ?? [];
 
+  const pendingNag = (ctx?.todayChecklist ?? []).filter((c: any) => c.status === "pending").length;
+
   return (
-    <div className="flex flex-col h-full min-h-[calc(100vh-6rem)]" data-testid="page-coach">
-      <header className="border-b pb-4 mb-4">
+    <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-8 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-2rem)]" data-testid="page-coach">
+      <header className="pb-5 mb-4 border-b border-border">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Coach</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Blunt, strict, remembers everything.
+            <div className="serif gold mb-1">The Coach</div>
+            <h1 className="font-display text-3xl font-bold tracking-tight" data-testid="text-page-title">
+              Talk to me.
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              Blunt. Strict. Remembers everything.
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-start">
             {ctx?.goal && (
-              <Badge variant="outline" data-testid="badge-goal">
-                Goal: {ctx.goal.targetWeight}lb / {ctx.goal.targetBodyFatPct}% BF
-              </Badge>
-            )}
-            {ctx?.settings && (
-              <Badge variant="secondary" data-testid="badge-sets">
-                {ctx.settings.weeklySetsPerBodyPart} sets/wk/part
-              </Badge>
+              <div className="border border-primary/30 bg-primary/5 rounded-md px-3 py-1.5" data-testid="badge-goal">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Goal</div>
+                <div className="font-semibold text-sm num-display">{ctx.goal.targetWeight}lb · {ctx.goal.targetBodyFatPct}% BF</div>
+              </div>
             )}
             {ctx && (
-              <Badge variant="outline" className="gap-1" data-testid="badge-memory">
-                <Brain className="w-3 h-3" /> {ctx.memory.length} facts
-              </Badge>
+              <div className="border border-border bg-card rounded-md px-3 py-1.5" data-testid="badge-memory">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Brain className="w-2.5 h-2.5" /> Memory
+                </div>
+                <div className="font-semibold text-sm num-display">{ctx.memory.length} facts</div>
+              </div>
+            )}
+            {pendingNag > 0 && (
+              <div className="border border-destructive/40 bg-destructive/5 rounded-md px-3 py-1.5" data-testid="badge-nag">
+                <div className="text-[10px] uppercase tracking-wider text-destructive/80">Pending</div>
+                <div className="font-semibold text-sm num-display text-destructive">{pendingNag} tasks</div>
+              </div>
             )}
           </div>
         </div>
 
         {ctx?.target && ctx.target.calories == null && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-500" data-testid="alert-calories-missing">
+          <div className="mt-3 flex items-center gap-2 text-xs text-primary" data-testid="alert-calories-missing">
             <AlertTriangle className="w-3 h-3" />
-            Calorie target not set. Coach won't guess — set from your last body scan.
+            Calorie target not set. Coach won't guess — recover it from your last body scan.
           </div>
         )}
       </header>
@@ -129,6 +139,7 @@ export default function Coach() {
         {messages.map((m) => (
           <MessageBubble key={m.id} message={m} />
         ))}
+
         {sendMutation.isPending && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground pl-2" data-testid="indicator-thinking">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -202,14 +213,14 @@ function MessageBubble({ message }: { message: Conversation }) {
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")} data-testid={`message-${message.role}-${message.id}`}>
       <div
         className={cn(
-          "max-w-[85%] rounded-lg px-4 py-3 whitespace-pre-wrap text-sm",
+          "max-w-[85%] rounded-md px-4 py-3 whitespace-pre-wrap text-sm leading-relaxed",
           isUser && "bg-primary text-primary-foreground",
-          isCoach && "bg-muted",
+          isCoach && "coach-bubble",
           message.role === "system" && "bg-amber-100 dark:bg-amber-900/30 text-xs italic",
         )}
       >
         {isCoach && (
-          <div className="flex items-center gap-1 text-xs opacity-60 mb-1">
+          <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-primary font-semibold mb-1.5">
             <Zap className="w-3 h-3" /> Coach
           </div>
         )}

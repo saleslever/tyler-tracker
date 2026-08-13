@@ -20,7 +20,7 @@ import {
   createUpload, listPendingUploads, confirmUpload, discardUpload,
   recentConversation,
 } from "./coachStorage";
-import { askCoach, generateWorkout } from "./coachEngine";
+import { askCoach, generateWorkout, extractFromImage } from "./coachEngine";
 import {
   insertCoachSettingsSchema, insertCoachMemorySchema, insertCoachChecklistSchema,
   insertFitnessGoalSchema, insertBodyScanSchema, insertNutritionTargetSchema,
@@ -288,6 +288,29 @@ export function registerCoachRoutes(app: Express) {
     try {
       await discardUpload(Number(req.params.id));
       res.json({ ok: true });
+    } catch (e) { err(res, e); }
+  });
+
+  // Run Claude Vision on an upload and store its structured extraction on the upload row.
+  // Body: {}
+  // Client can then review + confirm before it's committed to the target table.
+  app.post("/api/fitness/uploads/:id/extract", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const all = await listPendingUploads();
+      const row = all.find(r => r.id === id);
+      if (!row) return res.status(404).json({ error: "upload not found" });
+      const extracted = await extractFromImage(row.imageUrl, row.kind);
+      // persist extraction on the row so we can confirm it later
+      const updated = await createUpload({
+        imageUrl: row.imageUrl,
+        kind: row.kind,
+        aiExtracted: extracted,
+        notes: row.notes ?? undefined,
+      } as any);
+      // discard the original stub row so we don't duplicate
+      await discardUpload(row.id);
+      res.json(updated);
     } catch (e) { err(res, e); }
   });
 }

@@ -202,6 +202,75 @@ export async function askCoach(ctx: CoachContext, userMessage: string): Promise<
 }
 
 /**
+ * Extract structured data from an uploaded screenshot using Claude Vision.
+ * `imageDataUrl` must be a data: URL (e.g., data:image/jpeg;base64,...).
+ * `kind` tells the coach what shape to extract:
+ *   - macros: MacroFactor screenshot => { calories, proteinG, fatG, carbsG, netCarbsG, notes }
+ *   - scan: Body scan screenshot => { weight, bodyFatPct, dailyCalorieTarget, source, notes }
+ *   - whoop: Whoop screenshot => { sleepHours, whoopRecoveryPct, hrvMs, restingHr, notes }
+ *   - weight: Simple scale screenshot => { weight, unit, notes }
+ */
+export async function extractFromImage(imageDataUrl: string, kind: string): Promise<any> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { error: "ANTHROPIC_API_KEY not set" };
+
+  const match = imageDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+  if (!match) return { error: "Expected a data: URL image" };
+  const mediaType = match[1];
+  const b64 = match[2];
+
+  const prompts: Record<string, string> = {
+    macros: `Extract these fields from this MacroFactor (or similar macro tracker) screenshot. Return ONLY valid JSON, no prose:
+{"calories": <number|null>, "proteinG": <number|null>, "fatG": <number|null>, "carbsG": <number|null>, "netCarbsG": <number|null>, "notes": "<any anomalies>"}`,
+    scan: `Extract these fields from this body scan (Renpho, InBody, DEXA, Wyze, etc). Return ONLY valid JSON, no prose:
+{"weight": <number|null>, "weightUnit": "lb|kg", "bodyFatPct": <number|null>, "muscleMass": <number|null>, "dailyCalorieTarget": <number|null>, "source": "<brand>", "notes": "<any anomalies>"}`,
+    whoop: `Extract these fields from this Whoop screenshot. Return ONLY valid JSON, no prose:
+{"sleepHours": <number|null>, "whoopRecoveryPct": <number|null>, "hrvMs": <number|null>, "restingHr": <number|null>, "strain": <number|null>, "notes": "<any anomalies>"}`,
+    weight: `Extract the weight from this scale screenshot. Return ONLY valid JSON, no prose:
+{"weight": <number|null>, "unit": "lb|kg", "notes": "<any anomalies>"}`,
+    workout: `Extract exercises and sets from this workout screenshot. Return ONLY valid JSON, no prose:
+{"exercises": [{"name": "...", "sets": <number>, "reps": <string>, "weight": <string>, "targetBodyPart": "chest|back|quads|hamstrings|glutes|front_delts|side_delts|rear_delts|biceps_long|biceps_short|brachialis|triceps|core|calves|forearms|traps|cardio|basketball|none"}]}`,
+  };
+
+  const prompt = prompts[kind] ?? prompts.macros;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: COACH_MODEL,
+      max_tokens: 1024,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+          { type: "text", text: prompt },
+        ],
+      }],
+    }),
+  });
+
+  if (!res.ok) {
+    return { error: `Anthropic API ${res.status}: ${(await res.text()).slice(0, 300)}` };
+  }
+
+  const data = await res.json() as any;
+  const text = data.content?.[0]?.text ?? "";
+  // Try to parse JSON out of the response
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { error: "No JSON in response", raw: text.slice(0, 500) };
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    return { error: "Failed to parse JSON", raw: text.slice(0, 500) };
+  }
+}
+
+/**
  * Generate a workout for a specific date using coach context.
  * Returns a proposed WorkoutPlan.exercises structure — does NOT save.
  * User must confirm via POST /api/workouts/plan.

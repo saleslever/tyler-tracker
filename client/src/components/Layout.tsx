@@ -1,6 +1,5 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import crestMark from "@assets/crest_mark.png";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -10,11 +9,8 @@ import {
   Target,
   Menu,
   X,
-  RotateCcw,
   AlertTriangle,
   Trophy,
-  Volume2,
-  VolumeX,
   Swords,
   Crown,
   HeartPulse,
@@ -22,22 +18,20 @@ import {
   Settings as SettingsIcon,
   MessageSquare,
   Zap,
+  Upload as UploadIcon,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
-import { RankUpCeremony } from "./RankUpCeremony";
-import { DailyBossVictory } from "./DailyBossVictory";
-import { NewRecordCelebration } from "./NewRecordCelebration";
 import { cn } from "@/lib/utils";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { isMuted, setMuted } from "@/hooks/useSound";
 
 const NAV = [
   {
-    section: null,
+    section: "Coach",
     items: [
       { href: "/coach", label: "Coach", icon: MessageSquare },
       { href: "/generate", label: "Generate Workout", icon: Zap },
+      { href: "/uploads", label: "Uploads", icon: UploadIcon },
       { href: "/overview", label: "Overview", icon: LayoutDashboard },
     ],
   },
@@ -46,8 +40,6 @@ const NAV = [
     items: [
       { href: "/habits", label: "Habits", icon: CheckSquare },
       { href: "/fasting", label: "Fasting", icon: Timer },
-      { href: "/challenge", label: "Challenge", icon: Trophy },
-      { href: "/quests", label: "Quests", icon: Swords },
       { href: "/mood", label: "Mood", icon: HeartPulse },
       { href: "/tasks", label: "Tasks", icon: ListTodo },
       { href: "/journal", label: "Journal", icon: BookOpen },
@@ -62,34 +54,45 @@ const NAV = [
     ],
   },
   {
-    section: "App",
+    section: "System",
     items: [
       { href: "/settings", label: "Settings", icon: SettingsIcon },
     ],
   },
 ];
 
+interface CoachContext {
+  today: string;
+  todayChecklist: Array<{ id: number; task: string; status: string; dueTime?: string | null }>;
+}
+
+function useTheme() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) root.classList.add("dark");
+    else root.classList.remove("dark");
+  }, [isDark]);
+  return [isDark, () => setIsDark(v => !v)] as const;
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [, setMuteTick] = useState(0);
+  const [isDark, toggleTheme] = useTheme();
+
+  // Pull today's checklist to compute nag count for the Coach badge
+  const { data: coachContext } = useQuery<CoachContext>({
+    queryKey: ["/api/coach/context"],
+    refetchInterval: 60000,
+  });
+
+  const nagCount = (coachContext?.todayChecklist ?? []).filter(c => c.status === "pending").length;
 
   const isActive = (href: string) => (href === "/" ? location === "/" : location.startsWith(href));
-
-  async function handleReset() {
-    setResetting(true);
-    try {
-      await apiRequest("POST", "/api/reset", {});
-      await queryClient.invalidateQueries();
-      setResetOpen(false);
-    } catch (e) {
-      alert("Reset failed. Try again.");
-    } finally {
-      setResetting(false);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
@@ -102,16 +105,26 @@ export function Layout({ children }: { children: ReactNode }) {
         }}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <img src={crestMark} alt="TDD" className="w-8 h-8 object-contain shrink-0" draggable={false} />
-          <div className="serif text-xs tracking-widest truncate" style={{fontWeight: 700}}>Tyler's Daily Discipline</div>
+          <BrandMark />
+          <div className="font-display text-sm font-bold truncate">Coach OS</div>
+          {nagCount > 0 && <span className="nag-badge" data-testid="nag-badge-mobile">{nagCount}</span>}
         </div>
-        <button
-          onClick={() => setMobileOpen((v) => !v)}
-          className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-secondary shrink-0 ml-2"
-          aria-label="Toggle nav"
-        >
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleTheme}
+            className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-secondary"
+            aria-label="Toggle theme"
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => setMobileOpen((v) => !v)}
+            className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-secondary shrink-0"
+            aria-label="Toggle nav"
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -122,30 +135,51 @@ export function Layout({ children }: { children: ReactNode }) {
           mobileOpen && "!flex fixed inset-y-14 left-0 bottom-0 h-[calc(100vh-3.5rem)]"
         )}
       >
-        {/* Brand block (desktop only) */}
-        <div className="hidden md:flex flex-col items-center pt-8 pb-6 px-6 border-b border-sidebar-border">
-          <img src={crestMark} alt="Tyler's Daily Discipline" className="w-24 h-28 object-contain mb-2" draggable={false} />
-          <div className="serif text-[13px] leading-tight text-center" style={{fontWeight: 700, letterSpacing: "0.15em"}}>Tyler's Daily</div>
-          <div className="serif text-[13px] leading-tight text-center" style={{fontWeight: 700, letterSpacing: "0.15em"}}>Discipline</div>
-          <div className="microlabel mt-3">DISCIPLINE · GROWTH · LEGACY</div>
+        {/* Brand block */}
+        <div className="hidden md:flex items-center gap-3 px-5 pt-6 pb-5 border-b border-sidebar-border">
+          <BrandMark />
+          <div>
+            <div className="font-display text-base font-bold leading-tight" style={{ letterSpacing: "-0.02em" }}>
+              Coach OS
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-0.5">
+              Tyler Clark
+            </div>
+          </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
           {NAV.map((group, gi) => (
-            <div key={gi} className="mb-2">
-              {group.section && <div className="nav-section-label">{group.section}</div>}
+            <div key={gi} className="mb-4">
+              {group.section && (
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-semibold px-2 mb-1.5">
+                  {group.section}
+                </div>
+              )}
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const active = isActive(item.href);
+                const showNag = item.href === "/coach" && nagCount > 0;
                 return (
                   <Link key={item.href} href={item.href}>
                     <div
                       onClick={() => setMobileOpen(false)}
-                      className={cn("nav-item", isActive(item.href) && "active")}
-                      data-testid={`nav-${item.label.toLowerCase()}`}
+                      className={cn(
+                        "flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors text-sm",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-primary font-semibold"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                      )}
+                      data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                     >
-                      <Icon className="nav-icon" />
-                      <span>{item.label}</span>
+                      <Icon className={cn("w-4 h-4 shrink-0", active && "text-primary")} />
+                      <span className="flex-1">{item.label}</span>
+                      {showNag && (
+                        <span className="nag-badge" data-testid="nag-badge-sidebar">
+                          {nagCount}
+                        </span>
+                      )}
                     </div>
                   </Link>
                 );
@@ -156,21 +190,12 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {/* Footer */}
         <div className="border-t border-sidebar-border p-4">
-          <div className="microlabel">System</div>
-          <div className="text-xs text-muted-foreground mt-1 mb-3">v1.0 · Local</div>
           <button
-            onClick={() => { setMuted(!isMuted()); setMuteTick((t) => t + 1); }}
-            className="w-full text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border hover:border-foreground/40 rounded px-3 py-2 flex items-center justify-center gap-1.5 transition-colors mb-2"
-            data-testid="btn-toggle-sound"
+            onClick={toggleTheme}
+            className="w-full text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border hover:border-primary/40 rounded-md px-3 py-2 flex items-center justify-center gap-1.5 transition-colors"
+            data-testid="btn-toggle-theme"
           >
-            {isMuted() ? <><VolumeX className="w-3.5 h-3.5" /> Sound off</> : <><Volume2 className="w-3.5 h-3.5" /> Sound on</>}
-          </button>
-          <button
-            onClick={() => setResetOpen(true)}
-            className="w-full text-xs uppercase tracking-wider text-muted-foreground hover:text-destructive border border-border hover:border-destructive/60 rounded px-3 py-2 flex items-center justify-center gap-1.5 transition-colors"
-            data-testid="btn-reset-all"
-          >
-            <RotateCcw className="w-3.5 h-3.5" /> Reset all data
+            {isDark ? <><Sun className="w-3.5 h-3.5" /> Light</> : <><Moon className="w-3.5 h-3.5" /> Dark</>}
           </button>
         </div>
       </aside>
@@ -178,103 +203,66 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Main */}
       <main className="flex-1 min-w-0 mobile-safe-top mobile-safe-bottom md:!pt-0 md:!pb-0">{children}</main>
 
-      {/* Mobile bottom tab bar — the five most-used destinations. Sidebar
-          (via hamburger) still holds the less-frequent pages. */}
+      {/* Mobile bottom tab bar — coach-focused */}
       <nav
         className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t border-border"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="grid grid-cols-5 h-14">
           {[
-            { href: "/", label: "Home", icon: LayoutDashboard },
+            { href: "/coach", label: "Coach", icon: MessageSquare },
+            { href: "/generate", label: "Workout", icon: Zap },
             { href: "/habits", label: "Habits", icon: CheckSquare },
-            { href: "/fasting", label: "Fasting", icon: Timer },
-            { href: "/mood", label: "Mood", icon: HeartPulse },
+            { href: "/fasting", label: "Fast", icon: Timer },
             { href: "/analytics", label: "Stats", icon: BarChart3 },
           ].map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+            const showNag = item.href === "/coach" && nagCount > 0;
             return (
               <Link key={item.href} href={item.href}>
                 <div
                   className={cn(
-                    "flex flex-col items-center justify-center gap-0.5 h-full text-[10px] uppercase tracking-wider transition-colors",
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    "relative flex flex-col items-center justify-center gap-0.5 h-full text-[10px] uppercase tracking-wider transition-colors",
+                    active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                   )}
                   data-testid={`tab-${item.label.toLowerCase()}`}
                 >
-                  <Icon className={cn("w-5 h-5", active && "text-[#e0b74f]")} />
+                  <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
+                  {showNag && (
+                    <span className="absolute top-1 right-[calc(50%-1.75rem)] nag-badge" style={{ minWidth: "1rem", height: "1rem", fontSize: "0.625rem" }}>
+                      {nagCount}
+                    </span>
+                  )}
                 </div>
               </Link>
             );
           })}
         </div>
       </nav>
-
-      {/* Global click sounds disabled per user 2026-07-21 — the tap-anywhere
-          clink was noise. Habit-check chime and rank ceremonies still fire
-          from their own components. */}
-      {/* <GlobalClickSounds /> */}
-
-      {/* Global ceremonies — mounted once, listen for events */}
-      <GlobalCeremonies />
-
-      {/* Reset confirmation modal */}
-      {resetOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          onClick={() => !resetting && setResetOpen(false)}
-        >
-          <div
-            className="card-lux max-w-md w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-destructive/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
-              </div>
-              <div>
-                <div className="serif text-lg mb-1">Reset all data?</div>
-                <div className="text-sm text-muted-foreground">
-                  This permanently deletes every habit log, task, journal entry, and goal. It cannot be undone. Charts and streaks will start fresh from today.
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setResetOpen(false)}
-                disabled={resetting}
-                className="h-9 px-4 rounded border border-border hover:border-foreground/50 text-sm transition-colors disabled:opacity-50"
-                data-testid="btn-reset-cancel"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReset}
-                disabled={resetting}
-                className="h-9 px-4 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm font-medium transition-colors disabled:opacity-50"
-                data-testid="btn-reset-confirm"
-              >
-                {resetting ? "Resetting…" : "Yes, wipe everything"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function GlobalCeremonies() {
-  const { data: logs = [] } = useQuery<DailyLog[]>({ queryKey: ["/api/logs"] });
-  const { data: seals = [] } = useQuery<BossSeal[]>({ queryKey: ["/api/boss-seals"] });
-  const { data: challenge } = useQuery<Challenge | null>({ queryKey: ["/api/challenges/active"] });
+function BrandMark() {
+  // Simple gold monogram SVG — dangerous & clean, no cheesy crown
   return (
-    <>
-      <RankUpCeremony />
-      <DailyBossVictory logs={logs} challenge={challenge} />
-      <NewRecordCelebration logs={logs} seals={seals} />
-    </>
+    <svg
+      viewBox="0 0 40 40"
+      className="w-8 h-8 shrink-0"
+      fill="none"
+      aria-label="Coach OS"
+    >
+      <rect x="1" y="1" width="38" height="38" rx="8" stroke="currentColor" strokeOpacity="0.15" strokeWidth="1" />
+      <path
+        d="M11 12 L20 28 L29 12"
+        stroke="hsl(var(--primary))"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="20" cy="20" r="1.75" fill="hsl(var(--primary))" />
+    </svg>
   );
 }

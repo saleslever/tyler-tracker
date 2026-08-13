@@ -1,71 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400..900;1,400..900&family=Inter:wght@400..800&family=JetBrains+Mono:wght@500..700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Tyler's Daily Discipline — Platinum on Charcoal */
-/* Dark-only app. */
+/* Tyler Tracker — Fitness Coach OS
+ * Design DNA: Compass (warm cream, data-first oversized numerals, generous whitespace)
+ * blended with Clark Legacy Trading (near-black + gold accent, tracked-out caps, 10px radii).
+ * Two themes: light (Compass) and dark (Clark).
+ */
 
-:root, .dark {
+/* Light theme (Compass DNA) — default */
+:root {
+  --button-outline: rgba(0, 0, 0, 0.06);
+  --badge-outline: rgba(0, 0, 0, 0.05);
+  --opaque-button-border-intensity: -9;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.06);
+
+  /* Warm cream base — Compass-style */
+  --background: 36 40% 96%;         /* #FBF6EE cream */
+  --foreground: 24 20% 12%;         /* #211D18 espresso */
+  --border: 30 25% 88%;
+
+  --card: 36 45% 98%;               /* #FDF9F2 slightly lighter card */
+  --card-foreground: 24 20% 12%;
+  --card-border: 30 22% 86%;
+
+  --sidebar: 36 45% 94%;            /* warm sidebar */
+  --sidebar-foreground: 24 20% 15%;
+  --sidebar-border: 30 22% 85%;
+  --sidebar-primary: 24 20% 12%;
+  --sidebar-primary-foreground: 36 45% 98%;
+  --sidebar-accent: 42 35% 88%;
+  --sidebar-accent-foreground: 24 20% 12%;
+  --sidebar-ring: 42 60% 50%;
+
+  --popover: 36 45% 98%;
+  --popover-foreground: 24 20% 12%;
+  --popover-border: 30 22% 85%;
+
+  /* Gold accent — Clark Legacy Trading */
+  --primary: 42 65% 48%;            /* #C9A335 rich gold */
+  --primary-foreground: 24 20% 10%;
+
+  --secondary: 30 30% 90%;
+  --secondary-foreground: 24 20% 15%;
+
+  --muted: 30 25% 92%;
+  --muted-foreground: 24 12% 40%;
+
+  --accent: 42 65% 48%;
+  --accent-foreground: 24 20% 10%;
+
+  --destructive: 8 65% 50%;
+  --destructive-foreground: 36 45% 98%;
+
+  --input: 30 22% 82%;
+  --ring: 42 65% 48%;
+
+  /* Chart palette — earth + gold */
+  --chart-1: 42 65% 48%;   /* gold */
+  --chart-2: 24 30% 45%;   /* warm brown */
+  --chart-3: 145 40% 40%;  /* jungle green */
+  --chart-4: 8 55% 55%;    /* clay red */
+  --chart-5: 200 30% 45%;  /* cool slate */
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Fraunces", "Cinzel", Georgia, serif;
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-numeric: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.625rem;               /* 10px — CLT rhythm */
+
+  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.04);
+  --shadow: 0 4px 12px -2px rgba(0,0,0,0.06);
+  --shadow-md: 0 8px 24px -4px rgba(0,0,0,0.08);
+  --shadow-lg: 0 20px 40px -10px rgba(0,0,0,0.10);
+  --shadow-xl: 0 30px 60px -20px rgba(0,0,0,0.12);
+  --shadow-2xl: 0 40px 80px -30px rgba(0,0,0,0.15);
+}
+
+/* Dark theme (Clark Legacy Trading DNA) */
+.dark {
   --button-outline: rgba(255, 255, 255, 0.06);
   --badge-outline: rgba(255, 255, 255, 0.05);
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255, 255, 255, 0.03);
   --elevate-2: rgba(255, 255, 255, 0.06);
 
-  /* Charcoal base */
-  --background: 240 5% 5%;         /* #0A0A0B */
-  --foreground: 40 15% 92%;        /* platinum #EDEAE3 */
-  --border: 40 5% 15%;
+  --background: 230 12% 6%;         /* #08090C near black */
+  --foreground: 42 25% 88%;         /* warm cream on black */
+  --border: 230 8% 14%;
 
-  --card: 240 5% 7%;               /* #111112 */
-  --card-foreground: 40 15% 92%;
-  --card-border: 40 8% 14%;
+  --card: 230 10% 8%;               /* #10121A elevated card */
+  --card-foreground: 42 25% 88%;
+  --card-border: 230 8% 15%;
 
-  --sidebar: 240 5% 4%;            /* slightly darker for sidebar */
-  --sidebar-foreground: 40 12% 88%;
-  --sidebar-border: 40 6% 12%;
-  --sidebar-primary: 40 15% 88%;
-  --sidebar-primary-foreground: 240 5% 5%;
-  --sidebar-accent: 40 8% 12%;
-  --sidebar-accent-foreground: 40 15% 92%;
-  --sidebar-ring: 40 15% 78%;
+  --sidebar: 230 12% 5%;
+  --sidebar-foreground: 42 20% 82%;
+  --sidebar-border: 230 8% 12%;
+  --sidebar-primary: 42 65% 55%;
+  --sidebar-primary-foreground: 230 12% 6%;
+  --sidebar-accent: 230 10% 12%;
+  --sidebar-accent-foreground: 42 25% 88%;
+  --sidebar-ring: 42 65% 55%;
 
-  --popover: 240 5% 8%;
-  --popover-foreground: 40 15% 92%;
-  --popover-border: 40 6% 14%;
+  --popover: 230 10% 9%;
+  --popover-foreground: 42 25% 88%;
+  --popover-border: 230 8% 15%;
 
-  /* Platinum primary — off-white */
-  --primary: 40 15% 88%;
-  --primary-foreground: 240 5% 5%;
+  --primary: 42 65% 55%;            /* #E6C757 CLT gold */
+  --primary-foreground: 230 12% 6%;
 
-  --secondary: 240 5% 12%;
-  --secondary-foreground: 40 15% 90%;
+  --secondary: 230 10% 14%;
+  --secondary-foreground: 42 25% 85%;
 
-  --muted: 240 5% 10%;
-  --muted-foreground: 40 6% 55%;
+  --muted: 230 10% 12%;
+  --muted-foreground: 42 8% 58%;
 
-  --accent: 240 5% 12%;
-  --accent-foreground: 40 15% 92%;
+  --accent: 42 65% 55%;
+  --accent-foreground: 230 12% 6%;
 
-  --destructive: 0 65% 55%;
-  --destructive-foreground: 40 15% 95%;
+  --destructive: 8 65% 55%;
+  --destructive-foreground: 42 25% 95%;
 
-  --input: 40 6% 20%;
-  --ring: 40 15% 78%;
+  --input: 230 8% 20%;
+  --ring: 42 65% 55%;
 
-  /* Chart palette — platinum spectrum */
-  --chart-1: 40 15% 82%;   /* platinum */
-  --chart-2: 40 8% 60%;    /* silver */
-  --chart-3: 145 40% 55%;  /* subtle emerald for gains */
-  --chart-4: 0 55% 60%;    /* subtle red for losses */
-  --chart-5: 40 12% 45%;   /* dark silver */
-
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-serif: "Cinzel", Georgia, serif;
-  --font-display: "Cinzel", Georgia, serif;
-  --font-numeric: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 0.5rem;
+  --chart-1: 42 65% 55%;
+  --chart-2: 42 30% 60%;
+  --chart-3: 145 40% 55%;
+  --chart-4: 8 55% 60%;
+  --chart-5: 200 30% 55%;
 
   --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.4);
   --shadow: 0 4px 12px -2px rgba(0,0,0,0.5);
@@ -73,289 +140,164 @@
   --shadow-lg: 0 20px 40px -10px rgba(0,0,0,0.7);
   --shadow-xl: 0 30px 60px -20px rgba(0,0,0,0.8);
   --shadow-2xl: 0 40px 80px -30px rgba(0,0,0,0.9);
-
-  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
 @layer base {
   * { @apply border-border; }
   html { background: hsl(var(--background)); }
   html, body, #root { min-height: 100%; }
-  /* Prevent stray horizontal scroll on iOS when children set widths slightly
-     wider than the viewport (e.g., percentage-based grids + safe-area math). */
   html, body { overflow-x: hidden; max-width: 100%; }
   body {
     @apply font-sans antialiased text-foreground bg-background;
     letter-spacing: -0.005em;
   }
-  /* Mobile <main> padding: 3.5rem header + iOS safe-area inset.
-     Desktop overrides with md:!pt-0. */
-  .mobile-safe-top {
-    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
-  }
-  /* Bottom tab bar is 3.5rem tall + iOS home-indicator inset. */
-  .mobile-safe-bottom {
-    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
-  }
+  .mobile-safe-top { padding-top: calc(3.5rem + env(safe-area-inset-top, 0px)); }
+  .mobile-safe-bottom { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
   ::selection {
-    background: hsl(40 15% 88% / 0.25);
-    color: hsl(40 15% 98%);
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--primary-foreground));
   }
 }
 
 @layer components {
-  /* Cinzel — Roman inscriptional caps. Masculine, monumental, carved-in-stone. */
+  /* Tracked-out caps — the CLT signature. Repurposed .serif class. */
   .serif {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
+    font-size: 0.75rem;
   }
   .serif-hero {
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: -0.02em;
     line-height: 1.05;
-    text-transform: uppercase;
+    font-size: clamp(1.75rem, 3vw, 2.5rem);
   }
   .serif-italic {
-    /* Kept for backwards-compat. Cinzel has no true italic — use uppercase caps. */
-    font-family: var(--font-serif);
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-style: italic;
+    letter-spacing: -0.01em;
   }
-  /* Monospaced tabular numbers for big data readouts (streak counters, KPIs). */
+
+  /* Data-first oversized numerals (Compass DNA). Used for weight, streaks, macros. */
   .num-display {
     font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum", "zero";
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+  }
+  .num-huge {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.04em;
+    font-weight: 700;
+    font-size: clamp(2.5rem, 8vw, 4.5rem);
+    line-height: 1;
   }
 
-  /* Ornamental separator: · · · */
+  /* Ornamental section separator */
   .ornament {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: hsl(40 12% 55%);
+    color: hsl(var(--muted-foreground));
     font-size: 11px;
     letter-spacing: 0.25em;
     text-transform: uppercase;
+    font-weight: 600;
   }
   .ornament::before, .ornament::after {
     content: '';
     height: 1px;
     width: 24px;
-    background: linear-gradient(to right, transparent, hsl(40 15% 50%), transparent);
+    background: linear-gradient(to right, transparent, hsl(var(--primary) / 0.5), transparent);
   }
 
-  /* Subtle card — clean, no glass */
+  /* Clean cards — Compass style */
   .card-plain {
     background: hsl(var(--card));
     border: 1px solid hsl(var(--card-border));
     border-radius: var(--radius);
   }
 
-  /* Hero panel: rich charcoal + platinum radial glow + ornamental corners */
+  /* Warm hero panel */
   .hero-panel {
     background:
-      radial-gradient(ellipse 55% 85% at 50% 45%, hsl(40 25% 30% / 0.14), transparent 65%),
-      radial-gradient(ellipse 100% 100% at 50% 100%, hsl(40 15% 20% / 0.06), transparent 70%),
-      linear-gradient(180deg, hsl(240 5% 9%), hsl(240 5% 4%));
-    border: 1px solid hsl(40 12% 18%);
+      radial-gradient(ellipse 60% 90% at 50% 40%, hsl(var(--primary) / 0.08), transparent 65%),
+      linear-gradient(180deg, hsl(var(--card)), hsl(var(--background)));
+    border: 1px solid hsl(var(--primary) / 0.2);
     border-radius: 14px;
     position: relative;
     overflow: hidden;
     box-shadow:
-      0 30px 80px -30px hsl(0 0% 0% / 0.7),
-      inset 0 1px 0 hsl(40 15% 30% / 0.15);
+      0 20px 50px -20px hsl(var(--primary) / 0.15),
+      inset 0 1px 0 hsl(var(--primary) / 0.1);
   }
   .hero-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 40% 50% at 50% 40%, hsl(40 25% 55% / 0.06), transparent 70%);
-    pointer-events: none;
+    content: none;  /* legacy overlay disabled */
   }
-  /* Corner ornaments */
-  .hero-panel .corner {
-    position: absolute;
-    width: 32px;
-    height: 32px;
-    border-color: hsl(40 20% 60% / 0.55);
-    pointer-events: none;
-  }
-  .hero-panel .corner-tl { top: 14px; left: 14px; border-top: 1px solid; border-left: 1px solid; }
-  .hero-panel .corner-tr { top: 14px; right: 14px; border-top: 1px solid; border-right: 1px solid; }
-  .hero-panel .corner-bl { bottom: 14px; left: 14px; border-bottom: 1px solid; border-left: 1px solid; }
-  .hero-panel .corner-br { bottom: 14px; right: 14px; border-bottom: 1px solid; border-right: 1px solid; }
 
-  /* Stat cards — layered luxury feel */
-  .stat-card {
-    position: relative;
-    background:
-      linear-gradient(180deg, hsl(240 5% 8%), hsl(240 5% 6%));
+  /* Gold accent utility */
+  .gold {
+    color: hsl(var(--primary));
+  }
+  .gold-border {
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  /* Coach message bubble variants */
+  .coach-bubble {
+    background: hsl(var(--card));
     border: 1px solid hsl(var(--card-border));
-    border-radius: 10px;
-    padding: 20px;
-    transition: all 250ms ease;
-    box-shadow: inset 0 1px 0 hsl(40 15% 30% / 0.08);
-  }
-  .stat-card:hover {
-    border-color: hsl(40 15% 26%);
-    box-shadow:
-      inset 0 1px 0 hsl(40 20% 40% / 0.12),
-      0 8px 24px -8px hsl(0 0% 0% / 0.5);
-  }
-  .stat-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, hsl(40 20% 55% / 0.3), transparent);
-    pointer-events: none;
+    border-left: 3px solid hsl(var(--primary));
+    border-radius: var(--radius);
+    padding: 0.875rem 1rem;
   }
 
-  /* Nav item */
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    color: hsl(40 6% 62%);
-    font-size: 14px;
-    font-weight: 400;
-    transition: all 150ms ease;
-    cursor: pointer;
-    border: 1px solid transparent;
+  /* Ledger tile — for /generate page */
+  .ledger-tile {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--card-border));
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    transition: border-color 150ms ease;
   }
-  .nav-item:hover {
-    background: hsl(240 5% 9%);
-    color: hsl(40 15% 92%);
+  .ledger-tile:hover {
+    border-color: hsl(var(--primary) / 0.5);
   }
-  .nav-item.active {
-    background: hsl(240 5% 10%);
-    color: hsl(40 15% 95%);
-    border-color: hsl(40 8% 16%);
+  .ledger-tile[data-deficit="true"] {
+    border-color: hsl(var(--destructive) / 0.4);
+    background: hsl(var(--destructive) / 0.04);
   }
-  .nav-item .nav-icon { width: 16px; height: 16px; opacity: 0.9; }
-
-  .nav-section-label {
-    text-transform: uppercase;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    color: hsl(40 6% 40%);
-    padding: 12px 12px 6px;
-    font-weight: 500;
+  .ledger-tile[data-hit="true"] {
+    border-color: hsl(var(--primary) / 0.4);
+    background: hsl(var(--primary) / 0.06);
   }
 
-  /* Segmented control */
-  .seg {
+  /* Red badge for nagging (missed checklist items) */
+  .nag-badge {
     display: inline-flex;
-    background: hsl(240 5% 8%);
-    border: 1px solid hsl(40 6% 14%);
-    border-radius: 6px;
-    padding: 3px;
-    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.375rem;
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    border-radius: 999px;
+    line-height: 1;
+    animation: nag-pulse 2s ease-in-out infinite;
   }
-  .seg-btn {
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    color: hsl(40 6% 60%);
-    transition: all 150ms;
-    cursor: pointer;
-    font-weight: 500;
-  }
-  .seg-btn:hover { color: hsl(40 15% 90%); }
-  .seg-btn.active {
-    background: hsl(40 15% 88%);
-    color: hsl(240 5% 8%);
-  }
-
-  /* Subtle divider */
-  .hairline { border-top: 1px solid hsl(40 6% 12%); }
-
-  /* Micro label — small caps subtitle */
-  .microlabel {
-    text-transform: uppercase;
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    color: hsl(40 8% 55%);
-    font-weight: 500;
-  }
-
-  /* Card variant with a top platinum line */
-  .card-lux {
-    position: relative;
-    background: linear-gradient(180deg, hsl(240 5% 8%), hsl(240 5% 6%));
-    border: 1px solid hsl(var(--card-border));
-    border-radius: 10px;
-    box-shadow: inset 0 1px 0 hsl(40 15% 30% / 0.08);
-  }
-  .card-lux::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 20%; right: 20%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, hsl(40 22% 60% / 0.35), transparent);
-    pointer-events: none;
+  @keyframes nag-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.9; }
   }
 }
 
-@layer utilities {
-  input[type='search']::-webkit-search-cancel-button { @apply hidden; }
-  [contenteditable][data-placeholder]:empty::before {
-    content: attr(data-placeholder);
-    color: hsl(var(--muted-foreground));
-    pointer-events: none;
-  }
-  .no-default-hover-elevate {}
-  .no-default-active-elevate {}
-  .toggle-elevate::before, .toggle-elevate-2::before {
-    content: ''; pointer-events: none; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
-  }
-  .toggle-elevate.toggle-elevated::before { background-color: var(--elevate-2); }
-  .border.toggle-elevate::before { inset: -1px; }
-  .hover-elevate:not(.no-default-hover-elevate),
-  .active-elevate:not(.no-default-active-elevate),
-  .hover-elevate-2:not(.no-default-hover-elevate),
-  .active-elevate-2:not(.no-default-active-elevate) { position: relative; z-index: 0; }
-  .hover-elevate:not(.no-default-hover-elevate)::after,
-  .active-elevate:not(.no-default-active-elevate)::after,
-  .hover-elevate-2:not(.no-default-hover-elevate)::after,
-  .active-elevate-2:not(.no-default-active-elevate)::after {
-    content: ''; pointer-events: none; position: absolute; inset: 0; border-radius: inherit; z-index: 999;
-  }
-  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
-  .active-elevate:active:not(.no-default-active-elevate)::after { background-color: var(--elevate-1); }
-  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
-  .active-elevate-2:active:not(.no-default-active-elevate)::after { background-color: var(--elevate-2); }
-  .border.hover-elevate::after, .border.active-elevate::after,
-  .border.hover-elevate-2::after, .border.active-elevate-2::after { inset: -1px; }
 
-  /* Scrollbar — subtle */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: hsl(40 6% 20%);
-    border-radius: 4px;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(40 6% 30%); }
-
-  /* Hide number spinners for cleaner look */
-  input[type="number"]::-webkit-outer-spin-button,
-  input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-  input[type="number"] { -moz-appearance: textfield; }
-}

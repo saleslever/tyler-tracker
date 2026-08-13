@@ -23,6 +23,7 @@ const Fasting = lazy(() => import("@/pages/Fasting"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
 const Coach = lazy(() => import("@/pages/Coach"));
 const GenerateWorkout = lazy(() => import("@/pages/GenerateWorkout"));
+const Uploads = lazy(() => import("@/pages/Uploads"));
 
 function PageFallback() {
   return (
@@ -42,6 +43,7 @@ function AppRouter() {
           <Route path="/overview" component={Overview} />
           <Route path="/coach" component={Coach} />
           <Route path="/generate" component={GenerateWorkout} />
+          <Route path="/uploads" component={Uploads} />
           <Route path="/habits" component={Habits} />
           <Route path="/tasks" component={Tasks} />
           <Route path="/analytics" component={Analytics} />

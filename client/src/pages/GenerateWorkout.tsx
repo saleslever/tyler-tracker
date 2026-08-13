@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Zap, CheckCircle2, RefreshCcw, Dumbbell } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Ledger { [bodyPart: string]: number }
 
@@ -105,11 +106,12 @@ export default function GenerateWorkout() {
   const ledger = ledgerQuery.data ?? {};
 
   return (
-    <div className="space-y-6" data-testid="page-generate-workout">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8 space-y-6" data-testid="page-generate-workout">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Generate Workout</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Reads your 7-day ledger + recovery + past sessions. Even distribution across all muscle groups.
+        <div className="serif gold mb-1">Session Builder</div>
+        <h1 className="font-display text-3xl font-bold tracking-tight" data-testid="text-page-title">Generate Workout</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          Reads your 7-day ledger, recovery, and past sessions. Even distribution across all muscle groups.
         </p>
       </header>
 
@@ -164,16 +166,22 @@ export default function GenerateWorkout() {
               const pct = weeklyTarget > 0 ? Math.min(100, (count / weeklyTarget) * 100) : 0;
               const isDeficit = count < weeklyTarget * 0.5;
               return (
-                <div key={part} className="border rounded p-2" data-testid={`ledger-${part}`}>
+                <div
+                  key={part}
+                  className="ledger-tile"
+                  data-testid={`ledger-${part}`}
+                  data-deficit={isDeficit ? "true" : undefined}
+                  data-hit={count >= weeklyTarget ? "true" : undefined}
+                >
                   <div className="flex items-center justify-between text-xs">
-                    <span className="capitalize">{part.replace(/_/g, " ")}</span>
-                    <span className={isDeficit ? "text-amber-600 font-semibold" : "text-muted-foreground"}>
+                    <span className="capitalize font-medium">{part.replace(/_/g, " ")}</span>
+                    <span className={cn("num-display text-sm", isDeficit && "text-destructive", count >= weeklyTarget && "text-primary")}>
                       {count}/{weeklyTarget}
                     </span>
                   </div>
-                  <div className="h-1.5 mt-1 bg-muted rounded overflow-hidden">
+                  <div className="h-1.5 mt-1.5 bg-muted rounded-full overflow-hidden">
                     <div
-                      className={isDeficit ? "h-full bg-amber-500" : "h-full bg-primary"}
+                      className={cn("h-full rounded-full transition-all", isDeficit ? "bg-destructive/60" : "bg-primary")}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
