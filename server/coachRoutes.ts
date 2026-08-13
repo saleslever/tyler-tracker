@@ -42,18 +42,21 @@ export function registerCoachRoutes(app: Express) {
   // ─── Chat ─────────────────────────────────────────────────────
   app.post("/api/coach/chat", async (req, res) => {
     try {
-      // Message required unless an image is attached (then a default prompt is used)
+      // Message required unless one or more images are attached (then a default prompt is used)
       const rawMessage = typeof req.body?.message === "string" ? req.body.message : "";
-      const imageDataUrl = typeof req.body?.imageDataUrl === "string" ? req.body.imageDataUrl : undefined;
-      if (!rawMessage.trim() && !imageDataUrl) {
-        return res.status(400).json({ error: "message or imageDataUrl required" });
+      // Accept new array field OR legacy single-image field for backward compat
+      const rawUrls: string[] = Array.isArray(req.body?.imageDataUrls)
+        ? req.body.imageDataUrls.filter((u: any) => typeof u === "string")
+        : typeof req.body?.imageDataUrl === "string"
+          ? [req.body.imageDataUrl]
+          : [];
+      const imageDataUrls = rawUrls.filter(u => u.startsWith("data:image/"));
+      if (!rawMessage.trim() && imageDataUrls.length === 0) {
+        return res.status(400).json({ error: "message or imageDataUrls required" });
       }
       const message = z.string().max(4000).parse(rawMessage);
-      if (imageDataUrl && !imageDataUrl.startsWith("data:image/")) {
-        return res.status(400).json({ error: "imageDataUrl must be a data:image/... URL" });
-      }
       const ctx = await buildCoachContext();
-      const response = await askCoach(ctx, message, imageDataUrl);
+      const response = await askCoach(ctx, message, imageDataUrls);
       res.json(response);
     } catch (e) { err(res, e); }
   });

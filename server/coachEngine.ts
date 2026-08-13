@@ -136,7 +136,7 @@ async function callClaude(
 export async function askCoach(
   ctx: CoachContext,
   userMessage: string,
-  imageDataUrl?: string,
+  imageDataUrls?: string[],
 ): Promise<CoachResponse> {
   const systemPrompt = buildSystemPrompt(ctx);
 
@@ -145,24 +145,20 @@ export async function askCoach(
     .filter(t => t.role === "user" || t.role === "coach")
     .map(t => ({ role: t.role === "coach" ? "assistant" : "user", content: t.content }));
 
-  // Current user turn — mixed content if an image is attached
-  if (imageDataUrl) {
-    const match = imageDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
-    if (match) {
-      const mediaType = match[1];
-      const b64 = match[2];
-      const textPart = userMessage.trim() ||
-        "I'm sending you a screenshot. Read the data, log what applies (macros, weight, body-fat, sleep, recovery, etc), and tell me what you found. If it's a workout screenshot, extract exercises. If it's a body scan and it has a daily calorie target, note it but do NOT overwrite my current target without confirmation.";
-      history.push({
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
-          { type: "text", text: textPart },
-        ],
-      });
-    } else {
-      history.push({ role: "user", content: userMessage });
-    }
+  // Current user turn — mixed content if one or more images are attached
+  const validImages = (imageDataUrls ?? [])
+    .map(url => url.match(/^data:(image\/[^;]+);base64,(.+)$/))
+    .filter((m): m is RegExpMatchArray => m !== null);
+
+  if (validImages.length > 0) {
+    const textPart = userMessage.trim() ||
+      `I'm sending you ${validImages.length === 1 ? "a screenshot" : `${validImages.length} screenshots`}. Read the data in each one, tell me what type of screenshot it is (MacroFactor, Whoop, body scan, workout log, etc), and extract the numbers. Log what applies (macros → macro_logs, weight/BF% → body_scans, sleep/recovery → recovery_logs). If a body scan has a daily calorie target, tell me the number but do NOT overwrite my current target without confirmation. Be explicit about which values you're recording for today vs. flagging for confirmation.`;
+    const content: any[] = validImages.map(m => ({
+      type: "image",
+      source: { type: "base64", media_type: m[1], data: m[2] },
+    }));
+    content.push({ type: "text", text: textPart });
+    history.push({ role: "user", content });
   } else {
     history.push({ role: "user", content: userMessage });
   }
@@ -180,11 +176,12 @@ export async function askCoach(
     memoryCount: ctx.memory.length,
   };
 
-  // Log user turn first (record whether an image was attached so we have an audit trail)
+  // Log user turn first (record image count so we have an audit trail)
+  const imgCount = validImages.length;
   await logConversation({
     date: ctx.today,
     role: "user",
-    content: imageDataUrl ? `${userMessage}\n[image attached]` : userMessage,
+    content: imgCount > 0 ? `${userMessage}\n[${imgCount} image${imgCount === 1 ? "" : "s"} attached]` : userMessage,
     contextSnapshot,
     decisions: null as any,
     model: null as any,

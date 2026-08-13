@@ -37,8 +37,7 @@ interface CoachContext {
 
 export default function Coach() {
   const [input, setInput] = useState("");
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [imageName, setImageName] = useState<string | null>(null);
+  const [images, setImages] = useState<{ dataUrl: string; name: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,16 +51,17 @@ export default function Coach() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (payload: { message: string; imageDataUrl?: string | null }) => {
+    mutationFn: async (payload: { message: string; imageDataUrls?: string[] }) => {
       const body: any = { message: payload.message };
-      if (payload.imageDataUrl) body.imageDataUrl = payload.imageDataUrl;
+      if (payload.imageDataUrls && payload.imageDataUrls.length > 0) {
+        body.imageDataUrls = payload.imageDataUrls;
+      }
       const res = await apiRequest("POST", "/api/coach/chat", body);
       return res.json();
     },
     onSuccess: () => {
       setInput("");
-      setImageDataUrl(null);
-      setImageName(null);
+      setImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["/api/coach/conversation"] });
       queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
@@ -78,29 +78,39 @@ export default function Coach() {
   function submit() {
     const trimmed = input.trim();
     if (sendMutation.isPending) return;
-    if (!trimmed && !imageDataUrl) return;
-    sendMutation.mutate({ message: trimmed, imageDataUrl });
+    if (!trimmed && images.length === 0) return;
+    sendMutation.mutate({ message: trimmed, imageDataUrls: images.map(i => i.dataUrl) });
   }
 
-  async function handleFile(file: File) {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Only images can be attached.");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      alert("Image too large (15MB max).");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === "string") {
-        setImageDataUrl(result);
-        setImageName(file.name);
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    const accepted: { dataUrl: string; name: string }[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      if (file.size > 15 * 1024 * 1024) {
+        alert(`${file.name} is over 15MB, skipping.`);
+        continue;
       }
-    };
-    reader.readAsDataURL(file);
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const r = reader.result;
+          if (typeof r === "string") resolve(r);
+          else reject(new Error("read failed"));
+        };
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(file);
+      });
+      accepted.push({ dataUrl, name: file.name });
+    }
+    if (accepted.length > 0) {
+      setImages(prev => [...prev, ...accepted]);
+    }
+  }
+
+  function removeImage(idx: number) {
+    setImages(prev => prev.filter((_, i) => i !== idx));
   }
 
   const ctx = contextQuery.data;
@@ -180,24 +190,31 @@ export default function Coach() {
 
       {/* Input area */}
       <div className="border-t pt-4">
-        {imageDataUrl && (
-          <div className="mb-2 flex items-center gap-3 p-2 rounded-md bg-muted/60 border" data-testid="image-preview">
-            <img
-              src={imageDataUrl}
-              alt="attachment preview"
-              className="w-16 h-16 object-cover rounded"
-            />
-            <div className="flex-1 text-xs text-muted-foreground truncate">
-              {imageName ?? "Attached image"} — Coach will read this with your message.
+        {images.length > 0 && (
+          <div className="mb-2 p-2 rounded-md bg-muted/60 border" data-testid="image-preview">
+            <div className="text-xs text-muted-foreground mb-2">
+              {images.length} image{images.length === 1 ? "" : "s"} attached — Coach will read all of them with your message.
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => { setImageDataUrl(null); setImageName(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-              data-testid="button-remove-image"
-            >
-              <X className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-2 flex-wrap">
+              {images.map((img, idx) => (
+                <div key={idx} className="relative group" data-testid={`image-thumb-${idx}`}>
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    className="w-20 h-20 object-cover rounded border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(idx)}
+                    className="absolute -top-2 -right-2 bg-background border rounded-full w-5 h-5 flex items-center justify-center opacity-90 hover:opacity-100"
+                    data-testid={`button-remove-image-${idx}`}
+                    title={`Remove ${img.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex gap-2">
@@ -205,10 +222,12 @@ export default function Coach() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFile(file);
+              handleFiles(e.target.files);
+              // Reset so selecting the same file twice still triggers onChange
+              if (fileInputRef.current) fileInputRef.current.value = "";
             }}
             data-testid="input-file-hidden"
           />
@@ -220,7 +239,7 @@ export default function Coach() {
             onClick={() => fileInputRef.current?.click()}
             disabled={sendMutation.isPending}
             data-testid="button-attach-image"
-            title="Attach a screenshot (MacroFactor, Whoop, body scan, workout, anything)"
+            title="Attach screenshots (select multiple — MacroFactor, Whoop, body scan, workout, anything)"
           >
             <Paperclip className="w-4 h-4" />
           </Button>
@@ -233,7 +252,7 @@ export default function Coach() {
                 submit();
               }
             }}
-            placeholder={imageDataUrl ? "Add a note (optional) then send — Coach will read the image." : "Ask, log, complain, or attach a screenshot. Cmd/Ctrl+Enter to send."}
+            placeholder={images.length > 0 ? "Add a note (optional) then send — Coach will read all images." : "Ask, log, complain, or attach screenshots. Cmd/Ctrl+Enter to send."}
             rows={2}
             className="resize-none"
             disabled={sendMutation.isPending}
@@ -241,7 +260,7 @@ export default function Coach() {
           />
           <Button
             onClick={submit}
-            disabled={sendMutation.isPending || (!input.trim() && !imageDataUrl)}
+            disabled={sendMutation.isPending || (!input.trim() && images.length === 0)}
             className="self-end"
             data-testid="button-send"
           >
