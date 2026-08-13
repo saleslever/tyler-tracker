@@ -153,39 +153,39 @@ export default function Coach() {
   const trendRange = Math.max(maxTrend - minTrend, 1);
 
   return (
-    <div className="parchment min-h-screen">
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 py-8">
+    <div className="parchment min-h-screen pb-24 md:pb-8">
+      <div className="relative z-10 max-w-[1400px] mx-auto px-4 md:px-6 py-6 md:py-8">
 
         {/* ───────── Header ───────── */}
-        <header className="mb-8 flex items-start justify-between">
-          <div>
-            <h1 className="font-display text-5xl font-black tracking-tight leading-none">OVERVIEW</h1>
-            <p className="mt-3 text-xs tracking-[0.24em] uppercase text-primary font-medium">
+        <header className="mb-6 md:mb-8 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-3xl md:text-5xl font-black tracking-tight leading-none">OVERVIEW</h1>
+            <p className="mt-2 md:mt-3 text-[10px] md:text-xs tracking-[0.22em] md:tracking-[0.24em] uppercase text-primary font-medium leading-snug">
               All that stands between you and greatness is discipline.
             </p>
-            <div className="mt-4 h-px w-64 bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
+            <div className="mt-3 md:mt-4 h-px w-48 md:w-64 bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
           </div>
           <button
             onClick={() => setChatOpen(true)}
-            className="ornament-panel !py-2 !px-4 flex items-center gap-2 hover:bg-primary/5 transition text-sm font-display tracking-widest uppercase"
+            className="ornament-panel !py-2 !px-3 md:!px-4 flex items-center gap-2 hover:bg-primary/5 transition text-xs md:text-sm font-display tracking-widest uppercase flex-shrink-0"
             data-testid="button-open-atlas"
           >
             <Shield className="w-4 h-4 text-primary" />
-            Atlas
+            <span className="hidden sm:inline">Atlas</span>
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           </button>
         </header>
 
         {/* ───────── Main grid ───────── */}
-        <div className="grid grid-cols-12 gap-6">
+        <div className="grid grid-cols-12 gap-4 md:gap-6">
 
           {/* LEFT + CENTER: Score + Trend row */}
-          <div className="col-span-12 lg:col-span-8 space-y-6">
+          <div className="col-span-12 lg:col-span-8 space-y-4 md:space-y-6 order-2 lg:order-1">
 
             {/* Hero score + 7-day trend */}
-            <div className="grid grid-cols-12 gap-6">
+            <div className="grid grid-cols-12 gap-4 md:gap-6">
               {/* Today's Strength Score */}
-              <div className="col-span-12 md:col-span-7 ornament-panel">
+              <div className="col-span-12 md:col-span-7 ornament-panel !px-3 md:!px-6">
                 <div className="section-title mb-6">Today's Strength Score</div>
                 <div className="flex items-center justify-center gap-4">
                   <LaurelSVG side="left" />
@@ -231,9 +231,9 @@ export default function Coach() {
             </div>
 
             {/* Training Summary + Body Composition */}
-            <div className="grid grid-cols-12 gap-6">
+            <div className="grid grid-cols-12 gap-4 md:gap-6">
               {/* Training Summary */}
-              <div className="col-span-12 md:col-span-7 ornament-panel">
+              <div className="col-span-12 md:col-span-7 ornament-panel !px-3 md:!px-6 overflow-x-auto">
                 <div className="section-title mb-6">
                   <Dumbbell className="w-3 h-3" />
                   Training Summary
@@ -280,7 +280,7 @@ export default function Coach() {
             </div>
 
             {/* Operator card + calendar strip + lifetime stats */}
-            <div className="grid grid-cols-12 gap-6">
+            <div className="grid grid-cols-12 gap-4 md:gap-6">
               {/* OPERATOR (Atlas) */}
               <div className="col-span-12 md:col-span-4 ornament-panel">
                 <div className="section-title mb-4">Operator</div>
@@ -337,8 +337,8 @@ export default function Coach() {
             </div>
           </div>
 
-          {/* RIGHT RAIL: Weekly Goals + Achievements */}
-          <div className="col-span-12 lg:col-span-4 space-y-6">
+          {/* RIGHT RAIL: Weekly Goals + Achievements — above main content on mobile */}
+          <div className="col-span-12 lg:col-span-4 space-y-4 md:space-y-6 order-1 lg:order-2">
             <div className="ornament-panel">
               <div className="section-title mb-6">Weekly Goals</div>
               <div className="space-y-5">
@@ -617,6 +617,75 @@ function formatDate(date: string): string {
 // ─────────────────────────────────────────────────────────────
 // Chat Drawer
 // ─────────────────────────────────────────────────────────────
+function MessageBubble({ message }: { message: Conversation }) {
+  const isUser = message.role === "user";
+  const proposed = message.decisions?.workoutPlanToSet;
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!proposed) return;
+      const r = await apiRequest("POST", "/api/fitness/workouts/plan", {
+        date: proposed.date,
+        dayType: proposed.dayType,
+        exercises: proposed.exercises,
+        targetSetsByBodyPart: proposed.targetSetsByBodyPart ?? {},
+        source: "coach_chat",
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts/plan"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
+    },
+  });
+  return (
+    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+      <div className={cn(
+        "max-w-[85%] rounded px-3 py-2 text-sm",
+        isUser ? "bg-primary text-primary-foreground" : "bg-card border border-card-border text-foreground"
+      )}>
+        <div className="text-[9px] tracking-widest uppercase mb-1 opacity-60 font-display">
+          {isUser ? "You" : "Atlas"}
+        </div>
+        <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
+        {proposed && Array.isArray(proposed.exercises) && proposed.exercises.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-current/10">
+            <div className="text-[10px] tracking-[0.22em] uppercase font-bold mb-2 text-primary">
+              Proposed Workout · {proposed.date} · {proposed.dayType}
+            </div>
+            <ul className="text-xs space-y-1 mb-3">
+              {proposed.exercises.map((ex: any, i: number) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span>{i + 1}. {ex.name}</span>
+                  <span className="opacity-70 whitespace-nowrap font-mono">
+                    {ex.sets}×{ex.repsMin ?? "?"}-{ex.repsMax ?? "?"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending || saveMutation.isSuccess}
+                className="text-xs px-3 py-2 rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 uppercase tracking-wider font-bold"
+                data-testid="button-save-coach-workout"
+              >
+                {saveMutation.isSuccess ? "Saved ✓" : saveMutation.isPending ? "Saving…" : "Save as today's plan"}
+              </button>
+              <a
+                href="/#/generate"
+                className="text-xs px-3 py-2 rounded border border-current/20 hover:bg-current/5 uppercase tracking-wider inline-flex items-center"
+              >
+                Open workout page
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChatDrawer(props: {
   open: boolean; onClose: () => void; messages: Conversation[];
   input: string; setInput: (s: string) => void;
@@ -663,19 +732,7 @@ function ChatDrawer(props: {
               </div>
             )}
             {messages.map((m) => (
-              <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                <div className={cn(
-                  "max-w-[85%] rounded px-3 py-2 text-sm",
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-card-border text-foreground"
-                )}>
-                  <div className="text-[9px] tracking-widest uppercase mb-1 opacity-60 font-display">
-                    {m.role === "user" ? "You" : "Atlas"}
-                  </div>
-                  <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
-                </div>
-              </div>
+              <MessageBubble key={m.id} message={m} />
             ))}
             {isThinking && (
               <div className="flex justify-start">
