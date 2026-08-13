@@ -1,0 +1,243 @@
+/**
+ * Coach engine — the reasoning layer.
+ *
+ * Given a CoachContext (from coachStorage.buildCoachContext) and a user message,
+ * produce a coach response. Uses Anthropic's Claude Sonnet 4.6 via direct API.
+ *
+ * SECURITY: Never commits keys. Reads ANTHROPIC_API_KEY from process.env only.
+ * If unset, engine returns a diagnostic message so the UI still functions.
+ *
+ * OUTPUTS: The coach can return prose AND structured decisions (workout plans,
+ * memory updates, target changes). Decisions are proposed, not auto-applied —
+ * except workout logging which is user-initiated.
+ */
+import type { CoachContext } from "./coachStorage";
+import { logConversation, addCoachMemory, upsertWorkoutPlan } from "./coachStorage";
+
+const COACH_MODEL = "claude-sonnet-4-5-20250929";  // Anthropic API model id for Claude Sonnet 4.6
+const COACH_MAX_TOKENS = 2048;
+
+export interface CoachResponse {
+  text: string;
+  decisions?: {
+    memoryToAdd?: { kind: string; fact: string }[];
+    workoutPlanToSet?: any;
+    remindersToSet?: { task: string; dueTime?: string }[];
+  };
+  contextSnapshot: any;
+  model: string;
+  error?: string;
+}
+
+/**
+ * Build the system prompt from durable memory + hard-coded coach rules.
+ */
+function buildSystemPrompt(ctx: CoachContext): string {
+  const memoryBlock = ctx.memory
+    .map(m => `- [${m.kind}] ${m.fact}`)
+    .join("\n") || "- (no memory yet)";
+
+  return `You are Tyler's personal fitness coach. Not a friendly chatbot — a strict, blunt, best-in-class trainer.
+
+# YOUR CORE MISSION
+Build Tyler into a dangerous, ripped basketball player. Even muscle-group distribution, no gaps, no double-counted compound lifts.
+
+# HARD RULES (never violate)
+1. Actual workout data is IMMUTABLE. A later plan change never overwrites what Tyler already completed.
+2. Never invent, estimate, or overwrite the daily calorie target. If it's missing, say so — do not guess.
+3. Direct-target set counting only. Bench press credits chest, not triceps. Squats credit quads, not calves.
+4. Bicep anatomy: TWO heads (long, short) plus brachialis. Not three heads. Long head = incline DB curl. Short head = preacher/spider. Brachialis = hammer.
+5. Never treat a planned workout as completed. Never remove legs from a lifting day just because a later day has legs.
+6. Never ask Tyler to restate information already in the persistent record below.
+7. If a fact isn't in your context or memory, say "I don't have that yet — can you tell me?" — do NOT confabulate.
+8. State whether facts are: verified (from data), inferred (from patterns), or missing.
+
+# STYLE
+- Blunt. Direct. Action-oriented. No fluff, no over-encouragement.
+- Short paragraphs. Give the answer, then the reasoning.
+- If Tyler slacked, call it out. If he crushed it, acknowledge it briefly and push harder.
+- Never use emojis unless Tyler uses them first.
+
+# DURABLE MEMORY (facts about Tyler you must never forget)
+${memoryBlock}
+
+# LIVE CONTEXT (${ctx.today})
+- Active goal: ${ctx.goal ? `${ctx.goal.targetWeight ?? "?"} lb at ${ctx.goal.targetBodyFatPct ?? "?"}% BF by ${ctx.goal.targetDate ?? "?"}` : "NONE SET"}
+- Nutrition target: ${ctx.target ? `${ctx.target.calories ?? "UNKNOWN (recover from scan)"} kcal, protein ${ctx.target.proteinGramsMin}-${ctx.target.proteinGramsMax}g, fast ${ctx.target.fastingHoursMin}-${ctx.target.fastingHoursMax}h` : "NONE"}
+- Latest body scan: ${ctx.latestScan ? `${ctx.latestScan.date} — ${ctx.latestScan.weight ?? "?"} lb, ${ctx.latestScan.bodyFatPct ?? "?"}% BF (${ctx.latestScan.source ?? "?"})` : "NONE"}
+- Today's macros so far: ${ctx.todayMacros ? `${ctx.todayMacros.calories ?? 0} kcal, ${ctx.todayMacros.proteinG ?? 0}g protein` : "not logged yet"}
+- Latest recovery: ${ctx.latestRecovery ? `${ctx.latestRecovery.date} — ${ctx.latestRecovery.sleepHours ?? "?"}h sleep, Whoop ${ctx.latestRecovery.whoopRecoveryPct ?? "?"}%, HRV ${ctx.latestRecovery.hrvMs ?? "?"}ms` : "NONE"}
+- Today's workout plan: ${ctx.todayPlan ? `${ctx.todayPlan.dayType} — ${(ctx.todayPlan.exercises as any[])?.length ?? 0} exercises` : "NOT GENERATED"}
+- Weekly ledger (target ${ctx.settings.weeklySetsPerBodyPart}/wk per part): ${JSON.stringify(ctx.weeklyLedger)}
+- Coach checklist for today: ${ctx.todayChecklist.length} items — ${ctx.todayChecklist.filter(c => c.status === "pending").length} pending
+
+# WHAT YOU CAN DECIDE
+If Tyler tells you a new durable fact ("I've been getting shoulder pain on DB press"), you can propose a memoryToAdd decision.
+If Tyler asks for a workout, you can propose a workoutPlanToSet decision with structured exercises.
+If Tyler needs accountability, you can propose remindersToSet.
+
+Return your response as plain conversational text. If you have structured decisions, append them as a JSON code block at the end labelled \`\`\`decisions\n{...}\n\`\`\`.
+`;
+}
+
+function parseDecisions(text: string): { prose: string; decisions?: any } {
+  const match = text.match(/```decisions\s*\n([\s\S]*?)\n```/);
+  if (!match) return { prose: text };
+  try {
+    const decisions = JSON.parse(match[1]);
+    const prose = text.slice(0, match.index).trim();
+    return { prose, decisions };
+  } catch {
+    return { prose: text };
+  }
+}
+
+async function callClaude(systemPrompt: string, userMessages: { role: string; content: string }[]): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not set in environment");
+  }
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: COACH_MODEL,
+      max_tokens: COACH_MAX_TOKENS,
+      system: systemPrompt,
+      messages: userMessages,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Anthropic API ${res.status}: ${errText.slice(0, 500)}`);
+  }
+
+  const data = await res.json() as any;
+  const text = data.content?.[0]?.text;
+  if (!text) throw new Error(`No text in Anthropic response: ${JSON.stringify(data).slice(0, 500)}`);
+  return text;
+}
+
+/**
+ * Send a message to the coach and get a response.
+ * Auto-logs the exchange to coach_conversations.
+ * Auto-applies memoryToAdd decisions (they're just user facts).
+ * DOES NOT auto-apply workoutPlanToSet — user must confirm via a separate endpoint.
+ */
+export async function askCoach(ctx: CoachContext, userMessage: string): Promise<CoachResponse> {
+  const systemPrompt = buildSystemPrompt(ctx);
+
+  // Build recent message history from stored turns
+  const history = ctx.recentTurns
+    .filter(t => t.role === "user" || t.role === "coach")
+    .map(t => ({ role: t.role === "coach" ? "assistant" : "user", content: t.content }));
+  history.push({ role: "user", content: userMessage });
+
+  // Snapshot the context we're about to reason from (audit trail)
+  const contextSnapshot = {
+    date: ctx.today,
+    goal: ctx.goal,
+    target: ctx.target,
+    latestScan: ctx.latestScan,
+    latestRecovery: ctx.latestRecovery,
+    todayMacros: ctx.todayMacros,
+    todayPlan: ctx.todayPlan?.dayType,
+    weeklyLedger: ctx.weeklyLedger,
+    memoryCount: ctx.memory.length,
+  };
+
+  // Log user turn first
+  await logConversation({
+    date: ctx.today,
+    role: "user",
+    content: userMessage,
+    contextSnapshot,
+    decisions: null as any,
+    model: null as any,
+  });
+
+  let responseText: string;
+  let errorMsg: string | undefined;
+  try {
+    responseText = await callClaude(systemPrompt, history);
+  } catch (err: any) {
+    errorMsg = err?.message ?? String(err);
+    responseText = `[Coach engine error: ${errorMsg}]\n\nThe coach's memory is intact (${ctx.memory.length} facts recorded) but the model call failed. This usually means ANTHROPIC_API_KEY is not set in Railway environment variables. Set it in Railway → tyler-tracker service → Variables, then redeploy.`;
+  }
+
+  const { prose, decisions } = parseDecisions(responseText);
+
+  // Apply auto-decisions: memoryToAdd is trusted (it's user facts)
+  if (decisions?.memoryToAdd) {
+    for (const m of decisions.memoryToAdd) {
+      try {
+        await addCoachMemory({ kind: m.kind, fact: m.fact, source: `chat_${ctx.today}`, confidence: "high" });
+      } catch (e) { /* ignore memory errors */ }
+    }
+  }
+
+  // Log coach turn
+  await logConversation({
+    date: ctx.today,
+    role: "coach",
+    content: prose,
+    contextSnapshot,
+    decisions: decisions ?? (null as any),
+    model: COACH_MODEL,
+  });
+
+  return {
+    text: prose,
+    decisions,
+    contextSnapshot,
+    model: COACH_MODEL,
+    error: errorMsg,
+  };
+}
+
+/**
+ * Generate a workout for a specific date using coach context.
+ * Returns a proposed WorkoutPlan.exercises structure — does NOT save.
+ * User must confirm via POST /api/workouts/plan.
+ */
+export async function generateWorkout(ctx: CoachContext, targetDate: string, dayType: "strength" | "basketball" | "cardio" | "rest" = "strength"): Promise<any> {
+  const systemPrompt = buildSystemPrompt(ctx);
+
+  const userMessage = `Generate a ${dayType} workout for ${targetDate}.
+
+Requirements:
+- Target ${ctx.settings.weeklySetsPerBodyPart} sets/body part/week distributed evenly across the training week
+- Current weekly ledger: ${JSON.stringify(ctx.weeklyLedger)} — prioritize body parts under quota
+- Recovery: ${ctx.latestRecovery ? `${ctx.latestRecovery.whoopRecoveryPct}% Whoop, ${ctx.latestRecovery.sleepHours}h sleep` : "unknown — assume moderate"}
+- Archetype: dangerous ripped basketball player
+- Direct-target credit only (bench = chest, not triceps)
+
+Return ONLY a JSON code block with this exact shape, no prose:
+\`\`\`decisions
+{
+  "workoutPlanToSet": {
+    "date": "${targetDate}",
+    "dayType": "${dayType}",
+    "exercises": [
+      {"name": "Smith Machine Shoulder Press", "targetBodyPart": "front_delts", "sets": 4, "repsMin": 8, "repsMax": 12, "notes": "warm up then 3 working sets"}
+    ],
+    "targetSetsByBodyPart": {"chest": 6, "back": 6, "front_delts": 4}
+  }
+}
+\`\`\``;
+
+  try {
+    const responseText = await callClaude(systemPrompt, [{ role: "user", content: userMessage }]);
+    const { decisions } = parseDecisions(responseText);
+    if (decisions?.workoutPlanToSet) return decisions.workoutPlanToSet;
+    return { error: "Coach did not return a structured plan", raw: responseText };
+  } catch (err: any) {
+    return { error: err?.message ?? String(err) };
+  }
+}

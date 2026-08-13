@@ -10,8 +10,12 @@ import {
   insertRitualSchema,
 } from "@shared/schema";
 import { z } from "zod";
+import { registerCoachRoutes } from "./coachRoutes";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // Fitness Coach OS routes (M3)
+  registerCoachRoutes(app);
+
   // Reset (nukes everything)
   app.post("/api/reset", async (_req, res) => {
     await storage.resetAll();

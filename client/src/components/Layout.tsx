@@ -20,6 +20,8 @@ import {
   HeartPulse,
   Timer,
   Settings as SettingsIcon,
+  MessageSquare,
+  Zap,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { DailyLog, BossSeal, Challenge } from "@shared/schema";
@@ -33,7 +35,11 @@ import { isMuted, setMuted } from "@/hooks/useSound";
 const NAV = [
   {
     section: null,
-    items: [{ href: "/", label: "Overview", icon: LayoutDashboard }],
+    items: [
+      { href: "/coach", label: "Coach", icon: MessageSquare },
+      { href: "/generate", label: "Generate Workout", icon: Zap },
+      { href: "/overview", label: "Overview", icon: LayoutDashboard },
+    ],
   },
   {
     section: "Daily",

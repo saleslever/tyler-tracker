@@ -21,6 +21,8 @@ const Milestones = lazy(() => import("@/pages/Milestones"));
 const MoodPage = lazy(() => import("@/pages/Mood"));
 const Fasting = lazy(() => import("@/pages/Fasting"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
+const Coach = lazy(() => import("@/pages/Coach"));
+const GenerateWorkout = lazy(() => import("@/pages/GenerateWorkout"));
 
 function PageFallback() {
   return (
@@ -36,7 +38,10 @@ function AppRouter() {
     <Layout>
       <Suspense fallback={<PageFallback />}>
         <Switch>
-          <Route path="/" component={Overview} />
+          <Route path="/" component={Coach} />
+          <Route path="/overview" component={Overview} />
+          <Route path="/coach" component={Coach} />
+          <Route path="/generate" component={GenerateWorkout} />
           <Route path="/habits" component={Habits} />
           <Route path="/tasks" component={Tasks} />
           <Route path="/analytics" component={Analytics} />
