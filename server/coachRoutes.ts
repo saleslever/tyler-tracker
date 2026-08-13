@@ -344,4 +344,273 @@ export function registerCoachRoutes(app: Express) {
       res.json(updated);
     } catch (e) { err(res, e); }
   });
+
+  // ─── Strength score / overview endpoint ────────────────────────
+  // Composes an Overview-page payload from real data. No mocks.
+  app.get("/api/fitness/overview", async (_req, res) => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+
+      // Pull all sources we can derive score signals from
+      const [scan, target, goal, recovery, macros7, weeklyLedger, workoutLogs30] = await Promise.all([
+        latestBodyScan(),
+        currentNutritionTarget(),
+        getActiveGoal(),
+        latestRecoveryLog(),
+        listMacroLogsRange(new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10), today),
+        computeWeeklyLedger(today),
+        listWorkoutLogsRange(new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10), today),
+      ]);
+
+      const scans = await listBodyScans(60);
+      const macros30 = await listMacroLogsRange(new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10), today);
+
+      // ── Score pillars (0-10 each) ──
+      // Training Load: % of weekly ledger cap hit
+      const setCap = 24;
+      const totalSetsThisWeek = Object.values(weeklyLedger).reduce((a, b) => a + b, 0);
+      const trainingLoad = Math.min(10, (totalSetsThisWeek / setCap) * 10);
+
+      // Nutrition: protein-hit rate over last 7 days
+      const proteinTarget = target?.proteinG ?? 216;
+      const proteinHits = macros7.filter(m => (m.proteinG ?? 0) >= proteinTarget * 0.9).length;
+      const nutrition = macros7.length > 0 ? Math.min(10, (proteinHits / 7) * 10) : 0;
+
+      // Recovery: recovery % from latest Whoop scaled 0-10
+      const recoveryPillar = recovery?.whoopRecoveryPct != null
+        ? Math.min(10, (recovery.whoopRecoveryPct as number) / 10)
+        : 0;
+
+      // Consistency: workout-days over last 7
+      const uniqueDays = new Set(workoutLogs30.filter(w => w.date >= new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10)).map(w => w.date));
+      const consistency = Math.min(10, (uniqueDays.size / 5) * 10);
+
+      // Composite score (weighted, 0-300 range so it reads big)
+      const compositeToday = Math.round(
+        (trainingLoad * 8) + (nutrition * 8) + (recoveryPillar * 7) + (consistency * 7)
+      );
+
+      // Compute yesterday's composite (same pillars against yesterday cutoff)
+      const yesterdayLedger = await computeWeeklyLedger(yesterday);
+      const ySets = Object.values(yesterdayLedger).reduce((a, b) => a + b, 0);
+      const yTrainingLoad = Math.min(10, (ySets / setCap) * 10);
+      const yMacros7 = await listMacroLogsRange(new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10), yesterday);
+      const yProteinHits = yMacros7.filter(m => (m.proteinG ?? 0) >= proteinTarget * 0.9).length;
+      const yNutrition = yMacros7.length > 0 ? Math.min(10, (yProteinHits / 7) * 10) : 0;
+      const compositeYesterday = Math.round(
+        (yTrainingLoad * 8) + (yNutrition * 8) + (recoveryPillar * 7) + (consistency * 7)
+      );
+      const delta = compositeToday - compositeYesterday;
+
+      // 7-day trend series — score for each of last 7 days
+      const sevenDayTrend: { date: string; label: string; score: number }[] = [];
+      const dayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 864e5);
+        const dstr = d.toISOString().slice(0, 10);
+        const dl = await computeWeeklyLedger(dstr);
+        const ds = Object.values(dl).reduce((a, b) => a + b, 0);
+        const dTrainingLoad = Math.min(10, (ds / setCap) * 10);
+        const dMacros = await listMacroLogsRange(new Date(d.getTime() - 6 * 864e5).toISOString().slice(0, 10), dstr);
+        const dPhits = dMacros.filter(m => (m.proteinG ?? 0) >= proteinTarget * 0.9).length;
+        const dNutrition = dMacros.length > 0 ? Math.min(10, (dPhits / 7) * 10) : 0;
+        const dScore = Math.round((dTrainingLoad * 8) + (dNutrition * 8) + (recoveryPillar * 7) + (consistency * 7));
+        sevenDayTrend.push({ date: dstr, label: dayLabels[d.getDay()], score: dScore });
+      }
+
+      const weeklyAverage = Math.round(sevenDayTrend.reduce((s, x) => s + x.score, 0) / sevenDayTrend.length);
+
+      // Weekly average vs last week
+      const twoWeekAvgs: number[] = [];
+      for (let w = 0; w < 2; w++) {
+        let sum = 0;
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(Date.now() - (i + w * 7) * 864e5);
+          const dstr = d.toISOString().slice(0, 10);
+          const dl = await computeWeeklyLedger(dstr);
+          const ds = Object.values(dl).reduce((a, b) => a + b, 0);
+          sum += Math.round(Math.min(10, (ds / setCap) * 10) * 8);
+        }
+        twoWeekAvgs.push(Math.round(sum / 7));
+      }
+      const vsLastWeek = twoWeekAvgs[0] - twoWeekAvgs[1];
+
+      // ── Training Summary — top 5 exercises by total volume ──
+      const exerciseAgg: Record<string, { volume: number; sets: number; topWeight: number; reps: number }> = {};
+      for (const w of workoutLogs30) {
+        const key = w.exerciseName || "UNKNOWN";
+        if (!exerciseAgg[key]) exerciseAgg[key] = { volume: 0, sets: 0, topWeight: 0, reps: 0 };
+        const wt = w.weight ?? 0;
+        const rp = w.reps ?? 0;
+        exerciseAgg[key].volume += wt * rp;
+        exerciseAgg[key].sets += 1;
+        exerciseAgg[key].reps += rp;
+        if (wt > exerciseAgg[key].topWeight) exerciseAgg[key].topWeight = wt;
+      }
+      const trainingSummary = Object.entries(exerciseAgg)
+        .sort(([, a], [, b]) => b.volume - a.volume)
+        .slice(0, 5)
+        .map(([name, s]) => ({
+          name: name.toUpperCase(),
+          volume: Math.round(s.volume),
+          sets: s.sets,
+          intensity: Math.min(5, Math.round((s.sets / 6) * 5)),
+          personalRecord: s.topWeight,
+        }));
+
+      // ── Body Composition — from latest scan ──
+      const bodyComp = {
+        weight: scan?.weight ?? null,
+        bodyFatPct: scan?.bodyFatPct ?? null,
+        leanMassPct: scan?.bodyFatPct != null ? Math.round((100 - scan.bodyFatPct) * 10) / 10 : null,
+        waterPct: null as number | null,
+        scanDate: scan?.date ?? null,
+      };
+
+      // ── Weekly Goals — derived progress ──
+      const trainingSessionGoal = 5;
+      const actualSessions = uniqueDays.size;
+      const overloadGoal = 4;
+      // Progressive overload: exercises where topWeight this week > topWeight last week
+      const lastWeekLogs = workoutLogs30.filter(w => {
+        const d = new Date(w.date);
+        const cutoff = new Date(Date.now() - 7 * 864e5);
+        const start = new Date(Date.now() - 14 * 864e5);
+        return d >= start && d < cutoff;
+      });
+      const thisWeekTop: Record<string, number> = {};
+      const lastWeekTop: Record<string, number> = {};
+      const thisWeekStart = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+      for (const w of workoutLogs30) {
+        const key = w.exerciseName || "";
+        const wt = w.weight ?? 0;
+        if (w.date >= thisWeekStart) {
+          thisWeekTop[key] = Math.max(thisWeekTop[key] ?? 0, wt);
+        }
+      }
+      for (const w of lastWeekLogs) {
+        const key = w.exerciseName || "";
+        const wt = w.weight ?? 0;
+        lastWeekTop[key] = Math.max(lastWeekTop[key] ?? 0, wt);
+      }
+      const overloadHits = Object.keys(thisWeekTop).filter(k => thisWeekTop[k] > (lastWeekTop[k] ?? 0)).length;
+
+      const proteinDaysGoal = 7;
+      const sleepGoal = 7;
+      // Simple: count days recovery > 60% as "good sleep"
+      const recovery7 = await Promise.all(
+        Array.from({ length: 7 }).map((_, i) => getRecoveryLog(new Date(Date.now() - i * 864e5).toISOString().slice(0, 10)))
+      );
+      const sleepHits = recovery7.filter(r => (r?.whoopRecoveryPct ?? 0) >= 60).length;
+
+      const weeklyGoals = [
+        { label: "TRAINING SESSIONS", current: actualSessions, target: trainingSessionGoal, icon: "helmet" },
+        { label: "PROGRESSIVE OVERLOAD", current: overloadHits, target: overloadGoal, icon: "wreath" },
+        { label: "NUTRITION ADHERENCE", current: proteinHits, target: proteinDaysGoal, icon: "bowl" },
+        { label: "SLEEP CONSISTENCY", current: sleepHits, target: sleepGoal, icon: "moon" },
+      ];
+
+      // ── Achievements — derived from actual events ──
+      const achievements: { title: string; sub: string; date: string; kind: string }[] = [];
+      if (totalSetsThisWeek >= setCap) {
+        achievements.push({ title: "IRON DISCIPLINE", sub: `Hit weekly set cap (${setCap} sets)`, date: today, kind: "discipline" });
+      }
+      // New PR: highest-weight set in last 7 days that beats any prior 30-day max
+      const recentLogs = workoutLogs30.filter(w => w.date >= thisWeekStart);
+      const priorLogs = workoutLogs30.filter(w => w.date < thisWeekStart);
+      const priorMax: Record<string, number> = {};
+      for (const w of priorLogs) {
+        const k = w.exerciseName || "";
+        priorMax[k] = Math.max(priorMax[k] ?? 0, w.weight ?? 0);
+      }
+      const prs = recentLogs.filter(w => (w.weight ?? 0) > (priorMax[w.exerciseName || ""] ?? 0));
+      if (prs.length > 0) {
+        const best = prs.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0];
+        achievements.push({
+          title: "NEW PERSONAL BEST",
+          sub: `${(best.exerciseName || "").toUpperCase()}: ${best.weight} lb`,
+          date: best.date,
+          kind: "pr",
+        });
+      }
+      if (uniqueDays.size >= 3) {
+        achievements.push({ title: "CONSISTENCY KING", sub: `${uniqueDays.size} workouts this week`, date: today, kind: "consistency" });
+      }
+
+      // ── Calendar strip — last 7 days with icons ──
+      const calendar: { date: string; day: number; label: string; kind: string; isToday: boolean }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 864e5);
+        const dstr = d.toISOString().slice(0, 10);
+        const dayLogs = workoutLogs30.filter(w => w.date === dstr);
+        const dayMacro = macros30.find(m => m.date === dstr);
+        let kind = "rest";
+        if (dayLogs.length > 0) kind = "training";
+        else if (dayMacro && (dayMacro.proteinG ?? 0) >= proteinTarget * 0.9) kind = "nutrition";
+        calendar.push({
+          date: dstr,
+          day: d.getDate(),
+          label: dayLabels[d.getDay()],
+          kind,
+          isToday: dstr === today,
+        });
+      }
+
+      // ── Lifetime stats ──
+      const allLogs = await listWorkoutLogsRange("2020-01-01", today);
+      const totalWorkouts = new Set(allLogs.map(l => l.date)).size;
+      const totalVolume = allLogs.reduce((s, l) => s + ((l.weight ?? 0) * (l.reps ?? 0)), 0);
+      // Longest streak: consecutive days with workouts
+      const workoutDates = [...new Set(allLogs.map(l => l.date))].sort();
+      let longestStreak = 0;
+      let currentStreak = 0;
+      let prevDate: Date | null = null;
+      for (const dstr of workoutDates) {
+        const d = new Date(dstr);
+        if (prevDate && (d.getTime() - prevDate.getTime()) === 864e5) {
+          currentStreak++;
+        } else {
+          currentStreak = 1;
+        }
+        longestStreak = Math.max(longestStreak, currentStreak);
+        prevDate = d;
+      }
+      const allScores: number[] = sevenDayTrend.map(t => t.score);
+      const avgScore = allScores.length > 0 ? Math.round(allScores.reduce((s, v) => s + v, 0) / allScores.length) : 0;
+
+      res.json({
+        today,
+        strengthScore: {
+          composite: compositeToday,
+          delta,
+          pillars: {
+            trainingLoad: Math.round(trainingLoad * 10) / 10,
+            nutrition: Math.round(nutrition * 10) / 10,
+            recovery: Math.round(recoveryPillar * 10) / 10,
+            consistency: Math.round(consistency * 10) / 10,
+          },
+        },
+        trend: {
+          series: sevenDayTrend,
+          weeklyAverage,
+          vsLastWeek,
+        },
+        trainingSummary,
+        bodyComp,
+        weeklyGoals,
+        achievements: achievements.slice(0, 3),
+        calendar,
+        lifetimeStats: {
+          workouts: totalWorkouts,
+          totalVolumeKg: Math.round(totalVolume / 2.2046),
+          longestStreakWeeks: Math.round(longestStreak / 7),
+          avgScore,
+        },
+        target,
+        goal,
+        weeklyLedger,
+      });
+    } catch (e) { err(res, e); }
+  });
 }

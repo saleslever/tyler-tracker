@@ -379,4 +379,141 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent);
   }
+
+  /* Parchment texture — subtle noise + edge vignette for that aged-paper feel */
+  .parchment {
+    background:
+      radial-gradient(ellipse at top, hsl(var(--background)) 0%, hsl(30 20% 90%) 100%),
+      hsl(var(--background));
+    position: relative;
+  }
+  .dark .parchment {
+    background:
+      radial-gradient(ellipse at top, hsl(0 12% 5%) 0%, hsl(var(--background)) 100%),
+      hsl(var(--background));
+  }
+  .parchment::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.4 0 0 0 0 0.3 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.6;
+  }
+  .dark .parchment::before {
+    opacity: 0.3;
+  }
+
+  /* Ornamented panel — the parchment-card look with corner accents */
+  .ornament-panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--card-border));
+    border-radius: 4px;
+    position: relative;
+    padding: 1.25rem 1.5rem;
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.03),
+      inset 0 0 0 1px hsl(var(--card));
+  }
+  .dark .ornament-panel {
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.6),
+      inset 0 0 0 1px hsl(var(--card));
+  }
+
+  /* Section header — tracked-out serif with flourish underline */
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: hsl(var(--accent));
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+  .section-title::before,
+  .section-title::after {
+    content: '✻';
+    color: hsl(var(--accent) / 0.5);
+    font-size: 0.75rem;
+  }
+
+  /* Hero numeral — giant, condensed, stencil-heavy */
+  .hero-numeral {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-stretch: 75%;
+    font-variation-settings: "wght" 900, "opsz" 144;
+    font-size: clamp(6rem, 14vw, 11rem);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: hsl(var(--foreground));
+    text-align: center;
+  }
+
+  /* Laurel wreath side ornament — CSS flourish */
+  .laurel-left, .laurel-right {
+    width: 3rem;
+    height: 6rem;
+    color: hsl(var(--accent) / 0.4);
+  }
+
+  /* Intensity dots — 5-dot rating like the concept */
+  .intensity-dots {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .intensity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: hsl(var(--muted));
+  }
+  .intensity-dot.on {
+    background: hsl(var(--primary));
+  }
+
+  /* Progress bar — goal fill with bronze track + red fill */
+  .goal-bar {
+    height: 4px;
+    background: hsl(var(--muted));
+    border-radius: 2px;
+    overflow: hidden;
+    flex: 1;
+  }
+  .goal-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary)) 100%);
+    transition: width 0.6s ease;
+  }
+
+  /* Calendar day pill */
+  .cal-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    min-width: 48px;
+    font-family: var(--font-display);
+  }
+  .cal-day.today {
+    background: hsl(var(--primary) / 0.08);
+    border: 1px solid hsl(var(--primary));
+    border-radius: 4px;
+  }
+
+  /* Sidebar nav label — tracked-out serif */
+  .nav-label {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 0.8125rem;
+  }
 }
