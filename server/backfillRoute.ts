@@ -106,43 +106,45 @@ export function registerBackfillRoute(app: Express) {
         }
       }
 
-      // ─── Workout logs (Aug 10 Full Body Strength, Aug 11 Full Body B) ───
-      const wlCols = await pool.query(`select column_name from information_schema.columns where table_name='workout_logs' order by ordinal_position`);
-      const cols = wlCols.rows.map((r: any) => r.column_name);
-      log.push(`workout_logs cols: ${cols.join(",")}`);
-
-      const monday = [
-        "Deadlift 3x5-6", "Leg press 3x10-12", "Flat bench press 3x8-10", "Chest-supported row 3x8-12",
-        "Incline DB bench 3x8-12", "Lat pulldown or pull-ups 3x8-12", "Standing DB shoulder press 3x8-10",
-        "Hanging knee raises or plank 3 sets",
+      // ─── Workout logs — schema is per-set (exercise, target_body_part, set_number, reps, load_lbs, rpe, notes) ───
+      // No source column, so idempotency key: (date, exercise, notes contains 'screenshot_batch_2026-08-12')
+      type Ex = { name: string; part: string; sets: number; repsMin: number; repsMax: number };
+      const monday: Ex[] = [
+        { name: "Deadlift", part: "back", sets: 3, repsMin: 5, repsMax: 6 },
+        { name: "Leg press", part: "quads", sets: 3, repsMin: 10, repsMax: 12 },
+        { name: "Flat bench press", part: "chest", sets: 3, repsMin: 8, repsMax: 10 },
+        { name: "Chest-supported row", part: "back", sets: 3, repsMin: 8, repsMax: 12 },
+        { name: "Incline dumbbell bench", part: "chest", sets: 3, repsMin: 8, repsMax: 12 },
+        { name: "Lat pulldown", part: "back", sets: 3, repsMin: 8, repsMax: 12 },
+        { name: "Standing DB shoulder press", part: "shoulders", sets: 3, repsMin: 8, repsMax: 10 },
+        { name: "Hanging knee raises", part: "core", sets: 3, repsMin: 10, repsMax: 15 },
       ];
-      const tuesday = [
-        "Deadlift or trap-bar 3x5-6", "Bulgarian split squat 3x8-10 ea leg", "Chin-ups or underhand pulldowns 3x6-10",
-        "Reverse-grip bench 3x8-10", "Landmine or seated DB shoulder press 3x8-10", "DB curls 3x10-12",
+      const tuesday: Ex[] = [
+        { name: "Deadlift (trap-bar)", part: "back", sets: 3, repsMin: 5, repsMax: 6 },
+        { name: "Bulgarian split squat", part: "quads", sets: 3, repsMin: 8, repsMax: 10 },
+        { name: "Chin-ups", part: "back", sets: 3, repsMin: 6, repsMax: 10 },
+        { name: "Reverse-grip bench press", part: "chest", sets: 3, repsMin: 8, repsMax: 10 },
+        { name: "Landmine press", part: "shoulders", sets: 3, repsMin: 8, repsMax: 10 },
+        { name: "DB curls", part: "biceps", sets: 3, repsMin: 10, repsMax: 12 },
       ]; // hip thrust + rope pressdowns skipped
 
-      async function logDay(date: string, label: string, exercises: string[]) {
-        const ex = await pool.query("select count(*)::int as n from workout_logs where date=$1 and source=$2", [date, source]);
-        if (ex.rows[0].n > 0) { log.push(`workout ${date} already logged`); return; }
-        for (const line of exercises) {
-          const [name, ...rest] = line.split(" ");
-          const prescription = rest.join(" ");
-          const insertPairs: [string, any][] = [];
-          if (cols.includes("date")) insertPairs.push(["date", date]);
-          if (cols.includes("exercise_name")) insertPairs.push(["exercise_name", line.replace(/ \d.*$/, "")]);
-          if (cols.includes("exercise")) insertPairs.push(["exercise", line.replace(/ \d.*$/, "")]);
-          if (cols.includes("prescription")) insertPairs.push(["prescription", prescription]);
-          if (cols.includes("sets")) insertPairs.push(["sets", prescription]);
-          if (cols.includes("source")) insertPairs.push(["source", source]);
-          if (cols.includes("notes")) insertPairs.push(["notes", `${label} — completed per plan strikethrough. Weight/reps not captured.`]);
-          if (cols.includes("logged_at")) insertPairs.push(["logged_at", now]);
-          if (cols.includes("created_at")) insertPairs.push(["created_at", now]);
-          const colList = insertPairs.map(p => p[0]).join(", ");
-          const placeholders = insertPairs.map((_, i) => `$${i + 1}`).join(", ");
-          const vals = insertPairs.map(p => p[1]);
-          await pool.query(`insert into workout_logs (${colList}) values (${placeholders})`, vals);
+      const NOTE_MARK = `[${source}]`;
+
+      async function logDay(date: string, label: string, exercises: Ex[]) {
+        const ex = await pool.query("select count(*)::int as n from workout_logs where date=$1 and notes like $2", [date, `%${NOTE_MARK}%`]);
+        if (ex.rows[0].n > 0) { log.push(`workout ${date} already logged (${ex.rows[0].n} rows)`); return; }
+        let setCount = 0;
+        for (const e of exercises) {
+          for (let s = 1; s <= e.sets; s++) {
+            await pool.query(
+              `insert into workout_logs (date, exercise, target_body_part, set_number, reps, load_lbs, rpe, is_substitution, substituted_for, notes, logged_at)
+               values ($1,$2,$3,$4,NULL,NULL,NULL,0,NULL,$5,$6)`,
+              [date, e.name, e.part, s, `${label} — completed per plan. Prescription ${e.sets}x${e.repsMin}-${e.repsMax}. Weight/reps not captured in screenshot. ${NOTE_MARK}`, now]
+            );
+            setCount++;
+          }
         }
-        log.push(`logged ${exercises.length} exercises for ${date}`);
+        log.push(`logged ${setCount} sets across ${exercises.length} exercises for ${date}`);
       }
       await logDay("2026-08-10", "Monday Full Body Strength", monday);
       await logDay("2026-08-11", "Tuesday Full Body B", tuesday);
