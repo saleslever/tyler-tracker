@@ -220,11 +220,30 @@ export function registerCoachRoutes(app: Express) {
     try {
       const date = z.string().parse(req.body?.date);
       const dayType = (req.body?.dayType ?? "strength") as any;
+      // Client can pass an explicit cap list; otherwise compute from the ledger.
+      const explicitCap: string[] | undefined = Array.isArray(req.body?.cappedBodyParts)
+        ? req.body.cappedBodyParts
+        : undefined;
       const ctx = await buildCoachContext();
-      const plan = await generateWorkout(ctx, date, dayType);
+      const weeklyTarget = ctx.settings.weeklySetsPerBodyPart;
+      const derivedCap = Object.entries(ctx.weeklyLedger || {})
+        .filter(([, count]) => (count as number) >= weeklyTarget)
+        .map(([part]) => part);
+      const cappedBodyParts = explicitCap ?? derivedCap;
+      const plan = await generateWorkout(ctx, date, dayType, cappedBodyParts);
+      // Server-side filter: no matter what Coach says, never propose exercises
+      // whose targetBodyPart is already at cap.
+      if (plan && Array.isArray(plan.exercises)) {
+        const before = plan.exercises.length;
+        plan.exercises = plan.exercises.filter((ex: any) => !cappedBodyParts.includes(ex.targetBodyPart));
+        if (before !== plan.exercises.length) {
+          plan.notes = (plan.notes ?? "") + ` [server dropped ${before - plan.exercises.length} exercises targeting capped parts]`;
+        }
+      }
       res.json({ proposal: plan, context: {
         ledger: ctx.weeklyLedger,
-        weeklyTarget: ctx.settings.weeklySetsPerBodyPart,
+        weeklyTarget,
+        cappedBodyParts,
         recovery: ctx.latestRecovery,
       }});
     } catch (e) { err(res, e); }

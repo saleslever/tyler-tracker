@@ -69,11 +69,13 @@ ${memoryBlock}
 - Latest recovery: ${ctx.latestRecovery ? `${ctx.latestRecovery.date} — ${ctx.latestRecovery.sleepHours ?? "?"}h sleep, Whoop ${ctx.latestRecovery.whoopRecoveryPct ?? "?"}%, HRV ${ctx.latestRecovery.hrvMs ?? "?"}ms` : "NONE"}
 - Today's workout plan: ${ctx.todayPlan ? `${ctx.todayPlan.dayType} — ${(ctx.todayPlan.exercises as any[])?.length ?? 0} exercises` : "NOT GENERATED"}
 - Weekly ledger (target ${ctx.settings.weeklySetsPerBodyPart}/wk per part): ${JSON.stringify(ctx.weeklyLedger)}
+- Body parts already at or over weekly cap (never add more sets to these): ${Object.entries(ctx.weeklyLedger || {}).filter(([, v]) => (v as number) >= ctx.settings.weeklySetsPerBodyPart).map(([k]) => k).join(", ") || "none"}
 - Coach checklist for today: ${ctx.todayChecklist.length} items — ${ctx.todayChecklist.filter(c => c.status === "pending").length} pending
 
 # WHAT YOU CAN DECIDE
 If Tyler tells you a new durable fact ("I've been getting shoulder pain on DB press"), you can propose a memoryToAdd decision.
-If Tyler asks for a workout, you can propose a workoutPlanToSet decision with structured exercises.
+If Tyler asks for a workout, you can propose a workoutPlanToSet decision with structured exercises. RESPECT THE CAP: never include exercises whose direct target is already at ${ctx.settings.weeklySetsPerBodyPart}/wk.
+If Tyler wants to talk through a workout before generating, discuss it in prose first. When he's ready, emit workoutPlanToSet.
 If Tyler needs accountability, you can propose remindersToSet.
 
 Return your response as plain conversational text. If you have structured decisions, append them as a JSON code block at the end labelled \`\`\`decisions\n{...}\n\`\`\`.
@@ -300,14 +302,18 @@ export async function extractFromImage(imageDataUrl: string, kind: string): Prom
  * Returns a proposed WorkoutPlan.exercises structure — does NOT save.
  * User must confirm via POST /api/workouts/plan.
  */
-export async function generateWorkout(ctx: CoachContext, targetDate: string, dayType: "strength" | "basketball" | "cardio" | "rest" = "strength"): Promise<any> {
+export async function generateWorkout(ctx: CoachContext, targetDate: string, dayType: "strength" | "basketball" | "cardio" | "rest" = "strength", cappedBodyParts: string[] = []): Promise<any> {
   const systemPrompt = buildSystemPrompt(ctx);
+
+  const capLine = cappedBodyParts.length > 0
+    ? `\n- HARD CAP: DO NOT include ANY exercises targeting these body parts (already at weekly target): ${cappedBodyParts.join(", ")}. If a movement's direct target is capped, do not propose it.`
+    : "";
 
   const userMessage = `Generate a ${dayType} workout for ${targetDate}.
 
 Requirements:
 - Target ${ctx.settings.weeklySetsPerBodyPart} sets/body part/week distributed evenly across the training week
-- Current weekly ledger: ${JSON.stringify(ctx.weeklyLedger)} — prioritize body parts under quota
+- Current weekly ledger: ${JSON.stringify(ctx.weeklyLedger)} — prioritize body parts under quota${capLine}
 - Recovery: ${ctx.latestRecovery ? `${ctx.latestRecovery.whoopRecoveryPct}% Whoop, ${ctx.latestRecovery.sleepHours}h sleep` : "unknown — assume moderate"}
 - Archetype: dangerous ripped basketball player
 - Direct-target credit only (bench = chest, not triceps)

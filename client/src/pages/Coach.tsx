@@ -19,6 +19,7 @@ interface Conversation {
   content: string;
   model?: string | null;
   createdAt: string;
+  decisions?: any;
 }
 
 interface CoachContext {
@@ -301,6 +302,25 @@ export default function Coach() {
 function MessageBubble({ message }: { message: Conversation }) {
   const isUser = message.role === "user";
   const isCoach = message.role === "coach";
+  const proposedWorkout = message.decisions?.workoutPlanToSet;
+  const saveWorkoutMutation = useMutation({
+    mutationFn: async () => {
+      if (!proposedWorkout) return;
+      const r = await apiRequest("POST", "/api/fitness/workouts/plan", {
+        date: proposedWorkout.date,
+        dayType: proposedWorkout.dayType,
+        exercises: proposedWorkout.exercises,
+        targetSetsByBodyPart: proposedWorkout.targetSetsByBodyPart ?? {},
+        source: "coach_chat",
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts/plan"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
+    },
+  });
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")} data-testid={`message-${message.role}-${message.id}`}>
       <div
@@ -317,6 +337,37 @@ function MessageBubble({ message }: { message: Conversation }) {
           </div>
         )}
         {message.content}
+        {proposedWorkout && Array.isArray(proposedWorkout.exercises) && proposedWorkout.exercises.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-current/10">
+            <div className="text-[10px] uppercase tracking-widest text-primary/70 font-semibold mb-2">
+              Proposed workout · {proposedWorkout.date} · {proposedWorkout.dayType}
+            </div>
+            <ul className="text-xs space-y-1 mb-3">
+              {proposedWorkout.exercises.map((ex: any, i: number) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span>{i + 1}. {ex.name}</span>
+                  <span className="opacity-60 whitespace-nowrap">{ex.sets}×{ex.repsMin ?? "?"}-{ex.repsMax ?? "?"}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => saveWorkoutMutation.mutate()}
+                disabled={saveWorkoutMutation.isPending || saveWorkoutMutation.isSuccess}
+                className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60"
+                data-testid="button-save-coach-workout"
+              >
+                {saveWorkoutMutation.isSuccess ? "Saved ✓" : saveWorkoutMutation.isPending ? "Saving…" : "Save as plan"}
+              </button>
+              <a
+                href={`/#/generate-workout`}
+                className="text-xs px-3 py-1.5 rounded border border-current/20 hover:bg-current/5"
+              >
+                Open workout page
+              </a>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
