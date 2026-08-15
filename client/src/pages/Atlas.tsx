@@ -117,24 +117,14 @@ export default function Atlas() {
               )}
               <video
                 ref={videoRef}
-                autoPlay={playVideo}
+                autoPlay
                 loop
                 muted
                 playsInline
                 className="w-full h-full object-cover"
-                poster="/atlas-poster.jpg"
               >
                 <source src="/atlas-loop.mp4" type="video/mp4" />
               </video>
-              {!playVideo && !hasMessages && (
-                <button
-                  onClick={() => { setPlayVideo(true); videoRef.current?.play(); }}
-                  className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition"
-                  aria-label="Play Atlas intro"
-                >
-                  <Play className="w-10 h-10 text-white/90 fill-white/90" />
-                </button>
-              )}
               {/* Corner data ticks — the HUD detail */}
               <div className="absolute top-2 left-2 text-[8px] tracking-widest text-primary/70 font-mono">TGT:195</div>
               <div className="absolute top-2 right-2 text-[8px] tracking-widest text-primary/70 font-mono">D-{daysUntilBirthday()}</div>
