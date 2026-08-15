@@ -207,26 +207,32 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         <div className="grid grid-cols-5 h-14">
           {[
-            { href: "/coach", label: "Coach", icon: MessageSquare },
+            { href: "/coach", label: "Home", icon: BarChart3 },
+            { href: "/atlas", label: "Atlas", icon: MessageSquare, primary: true },
             { href: "/generate", label: "Workout", icon: Zap },
             { href: "/habits", label: "Habits", icon: CheckSquare },
             { href: "/fasting", label: "Fast", icon: Timer },
-            { href: "/analytics", label: "Stats", icon: BarChart3 },
           ].map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
-            const showNag = item.href === "/coach" && nagCount > 0;
+            const showNag = item.href === "/atlas" && nagCount > 0;
             return (
               <Link key={item.href} href={item.href}>
                 <div
                   className={cn(
                     "relative flex flex-col items-center justify-center gap-0.5 h-full text-[10px] uppercase tracking-wider transition-colors",
-                    active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                    active ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                    (item as any).primary && !active && "text-foreground"
                   )}
                   data-testid={`tab-${item.label.toLowerCase()}`}
                 >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
+                  {(item as any).primary && (
+                    <div className="absolute -top-3 w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-background">
+                      <Icon className="w-5 h-5" />
+                    </div>
+                  )}
+                  {!(item as any).primary && <Icon className="w-5 h-5" />}
+                  <span className={cn((item as any).primary && "mt-6 font-bold")}>{item.label}</span>
                   {showNag && (
                     <span className="absolute top-1 right-[calc(50%-1.75rem)] nag-badge" style={{ minWidth: "1rem", height: "1rem", fontSize: "0.625rem" }}>
                       {nagCount}

@@ -172,7 +172,8 @@ export default function Fasting() {
   }
 
   return (
-    <div className="max-w-[900px] mx-auto px-4 md:px-8 py-6 md:py-8">
+    <div className="parchment fasting-parchment min-h-screen">
+    <div className="max-w-[900px] mx-auto px-4 md:px-8 py-6 md:py-8 relative z-10">
       {/* Header */}
       <div className="flex items-baseline justify-between mb-4 md:mb-6">
         <div>
@@ -386,6 +387,7 @@ export default function Fasting() {
         onClose={() => setManualOpen(false)}
         onSaved={() => setManualOpen(false)}
       />
+    </div>
     </div>
   );
 }

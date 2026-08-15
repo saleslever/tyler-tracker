@@ -534,4 +534,43 @@
     text-transform: uppercase;
     font-size: 0.8125rem;
   }
+
+  /* Fasting page parchment retheme — override legacy warm-gold hex with palette-2 bronze */
+  .fasting-parchment [style*="#B08D57"],
+  .fasting-parchment [class*="text-[#B08D57]"] { color: hsl(var(--accent)) !important; }
+  .fasting-parchment [class*="bg-[#B08D57]"] {
+    background: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+  .fasting-parchment [class*="hover:bg-[#C9A063]"]:hover {
+    background: hsl(var(--primary) / 0.85) !important;
+  }
+  .fasting-parchment .card-lux {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--accent) / 0.25);
+    border-radius: 4px;
+    position: relative;
+  }
+  .fasting-parchment .card-lux::before,
+  .fasting-parchment .card-lux::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: hsl(var(--accent) / 0.4);
+    border-style: solid;
+  }
+  .fasting-parchment .card-lux::before { top: 6px; left: 6px; border-width: 1px 0 0 1px; }
+  .fasting-parchment .card-lux::after { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
+  .fasting-parchment .microlabel {
+    color: hsl(var(--muted-foreground));
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    font-size: 0.625rem;
+    font-weight: 600;
+  }
+  .fasting-parchment .serif {
+    font-family: var(--font-display);
+    color: hsl(var(--foreground));
+  }
 }

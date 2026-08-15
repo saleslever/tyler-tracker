@@ -613,4 +613,192 @@ export function registerCoachRoutes(app: Express) {
       });
     } catch (e) { err(res, e); }
   });
+
+  // ─── Personalized dashboard endpoint (Tyler-tailored) ──────────
+  // Composes all metrics needed for the new Analytics page.
+  app.get("/api/fitness/dashboard", async (_req, res) => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const daysBack = 84; // ~12 weeks of history
+      const startDate = new Date(Date.now() - daysBack * 864e5).toISOString().slice(0, 10);
+
+      const [scans, macros, workoutLogs, weeklyLedger, goal, dailyLogsAll, fastsAll] = await Promise.all([
+        listBodyScans(120),
+        listMacroLogsRange(startDate, today),
+        listWorkoutLogsRange(startDate, today),
+        computeWeeklyLedger(today),
+        getActiveGoal(),
+        (await import("./storage")).storage.getAllLogs(),
+        (await import("./storage")).storage.getFasts(),
+      ]);
+
+      // ── Weight trajectory ── (from body_scans, most recent first sorted asc)
+      const scansAsc = [...scans].filter(s => s.weight != null).sort((a, b) => a.date.localeCompare(b.date));
+      const weightSeries = scansAsc.map(s => ({ date: s.date, weight: Number(s.weight) }));
+
+      // Also merge dailyLogs.weight when present
+      const dailyWeightPoints = (dailyLogsAll || [])
+        .filter((d: any) => d.weight != null && d.weight > 0)
+        .map((d: any) => ({ date: d.date, weight: Number(d.weight) }))
+        .sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+      // Merge by date, prefer body_scans when both
+      const dateMap = new Map<string, number>();
+      for (const p of dailyWeightPoints) dateMap.set(p.date, p.weight);
+      for (const p of weightSeries) dateMap.set(p.date, p.weight);
+      const mergedWeights = Array.from(dateMap.entries())
+        .map(([date, weight]) => ({ date, weight }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Starting weight = earliest recorded; current = latest
+      const startWeight = mergedWeights[0]?.weight ?? 252.2;
+      const currentWeight = mergedWeights[mergedWeights.length - 1]?.weight ?? startWeight;
+      const totalLost = Number((startWeight - currentWeight).toFixed(1));
+
+      // Weekly deltas — group weight points by ISO week, take last of each week
+      function weekKey(dateStr: string): string {
+        const d = new Date(dateStr);
+        const start = new Date(d);
+        start.setDate(d.getDate() - d.getDay()); // Sunday
+        return start.toISOString().slice(0, 10);
+      }
+      const byWeek = new Map<string, { date: string; weight: number }[]>();
+      for (const p of mergedWeights) {
+        const k = weekKey(p.date);
+        if (!byWeek.has(k)) byWeek.set(k, []);
+        byWeek.get(k)!.push(p);
+      }
+      const weeklyWeights = Array.from(byWeek.entries())
+        .map(([week, points]) => ({ week, weight: points[points.length - 1].weight }))
+        .sort((a, b) => a.week.localeCompare(b.week));
+      const weeklyDeltas = weeklyWeights.map((w, i) => {
+        const prev = weeklyWeights[i - 1];
+        return {
+          week: w.week,
+          weight: w.weight,
+          delta: prev ? Number((w.weight - prev.weight).toFixed(1)) : 0,
+        };
+      });
+
+      // Projection to 195 by March 6 2027
+      const targetWeight = goal?.targetWeight ?? 195;
+      const targetDate = goal?.targetDate ?? "2027-03-06";
+      const daysToTarget = Math.max(1, Math.ceil((new Date(targetDate).getTime() - Date.now()) / 864e5));
+      const remaining = Number((currentWeight - targetWeight).toFixed(1));
+      const requiredPerWeek = Number(((remaining / daysToTarget) * 7).toFixed(2));
+      // Actual rate over last 28 days
+      const recent = mergedWeights.filter(w => w.date >= new Date(Date.now() - 28 * 864e5).toISOString().slice(0, 10));
+      let actualPerWeek = 0;
+      if (recent.length >= 2) {
+        const first = recent[0];
+        const last = recent[recent.length - 1];
+        const dayDiff = Math.max(1, (new Date(last.date).getTime() - new Date(first.date).getTime()) / 864e5);
+        actualPerWeek = Number((((first.weight - last.weight) / dayDiff) * 7).toFixed(2));
+      }
+      const projectedDate = actualPerWeek > 0
+        ? new Date(Date.now() + (remaining / actualPerWeek) * 7 * 864e5).toISOString().slice(0, 10)
+        : null;
+      const onTrack = actualPerWeek > 0 && actualPerWeek >= requiredPerWeek * 0.9;
+
+      // ── Body-part sets this week (for silhouette) ──
+      // weeklyLedger already keyed by direct body part
+      const bodyPartSets = {
+        chest: weeklyLedger.chest ?? 0,
+        back: weeklyLedger.back ?? 0,
+        shoulders: (weeklyLedger.front_delts ?? 0) + (weeklyLedger.side_delts ?? 0) + (weeklyLedger.rear_delts ?? 0),
+        biceps: weeklyLedger.biceps ?? 0,
+        triceps: weeklyLedger.triceps ?? 0,
+        legs: (weeklyLedger.quads ?? 0) + (weeklyLedger.hamstrings ?? 0) + (weeklyLedger.glutes ?? 0),
+        abs: weeklyLedger.core ?? 0,
+      };
+      const bodyPartTargets = { chest: 18, back: 18, shoulders: 18, biceps: 18, triceps: 18, legs: 18, abs: 9 };
+
+      // ── Fasting stats ──
+      const closedFasts = fastsAll.filter((f: any) => f.endedAt);
+      const activeFast = fastsAll.find((f: any) => !f.endedAt);
+      const durations = closedFasts.map((f: any) => {
+        const ms = new Date(f.endedAt).getTime() - new Date(f.startedAt).getTime();
+        return ms / (1000 * 60 * 60);
+      });
+      const currentFastHours = activeFast
+        ? (Date.now() - new Date(activeFast.startedAt).getTime()) / (1000 * 60 * 60)
+        : null;
+      const longestFast = durations.length ? Math.max(...durations) : 0;
+      const avgFast = durations.length ? durations.reduce((a: number, b: number) => a + b, 0) / durations.length : 0;
+
+      // ── Days sober (no alcohol streak) ──
+      // Count consecutive days from today backwards where noAlcohol=1
+      const logsByDate = new Map<string, any>();
+      for (const l of dailyLogsAll || []) logsByDate.set(l.date, l);
+      let soberStreak = 0;
+      for (let i = 0; i < 365; i++) {
+        const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+        const l = logsByDate.get(d);
+        if (l && l.noAlcohol === 1) soberStreak++;
+        else if (i === 0) continue; // today may not be logged yet; keep going
+        else break;
+      }
+      // Fallback: manual anchor — last drink July 30 2026
+      const anchoredSober = Math.floor((Date.now() - new Date("2026-07-31T00:00:00").getTime()) / 864e5) + 1;
+      const daysSober = Math.max(soberStreak, anchoredSober);
+
+      // ── Weekly calorie totals + daily average ──
+      const macrosByWeek = new Map<string, { total: number; count: number }>();
+      for (const m of macros) {
+        if (m.calories == null) continue;
+        const k = weekKey(m.date);
+        if (!macrosByWeek.has(k)) macrosByWeek.set(k, { total: 0, count: 0 });
+        const entry = macrosByWeek.get(k)!;
+        entry.total += m.calories;
+        entry.count++;
+      }
+      const weeklyCalories = Array.from(macrosByWeek.entries())
+        .map(([week, { total, count }]) => ({ week, total, dailyAvg: Math.round(total / Math.max(1, count)) }))
+        .sort((a, b) => a.week.localeCompare(b.week))
+        .slice(-8);
+
+      // ── Step counts (last 14 days from daily_logs.steps) ──
+      const stepSeries: { date: string; steps: number; hit10k: boolean }[] = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+        const l = logsByDate.get(d);
+        const steps = l?.steps ?? 0;
+        stepSeries.push({ date: d, steps, hit10k: steps >= 10000 });
+      }
+      const avgSteps = Math.round(stepSeries.reduce((a, b) => a + b.steps, 0) / stepSeries.length);
+
+      // ── Protein daily hits (200g target) ──
+      const proteinHits14 = macros
+        .filter(m => m.date >= new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10))
+        .map(m => ({ date: m.date, hit: (m.proteinG ?? 0) >= 200 }));
+
+      // ── Workouts this week count ──
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const weekStartStr = weekStart.toISOString().slice(0, 10);
+      const workoutsThisWeek = new Set(workoutLogs.filter(w => w.date >= weekStartStr).map(w => w.date)).size;
+
+      res.json({
+        today,
+        goal: { startWeight, currentWeight, targetWeight, targetDate, totalLost, remaining, daysToTarget },
+        projection: { requiredPerWeek, actualPerWeek, projectedDate, onTrack },
+        weeklyDeltas,
+        mergedWeights: mergedWeights.slice(-90), // last ~90 pts
+        bodyPartSets,
+        bodyPartTargets,
+        fasting: {
+          current: currentFastHours ? Number(currentFastHours.toFixed(1)) : null,
+          longest: Number(longestFast.toFixed(1)),
+          average: Number(avgFast.toFixed(1)),
+          totalCount: closedFasts.length,
+        },
+        daysSober,
+        weeklyCalories,
+        stepSeries,
+        avgSteps,
+        proteinHits14,
+        workoutsThisWeek,
+      });
+    } catch (e) { err(res, e); }
+  });
 }
