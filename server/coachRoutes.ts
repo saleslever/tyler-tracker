@@ -78,6 +78,33 @@ function err(res: any, e: unknown, status = 400) {
 export function registerCoachRoutes(app: Express) {
 
   // ─── Context snapshot ─────────────────────────────────────────
+  // Debug endpoint — see raw DB state (macros, workouts by date, weights)
+  app.get("/api/coach/debug/state", async (_req, res) => {
+    try {
+      const [macros, workouts, weights] = await Promise.all([
+        coachStorage.listMacroLogsRange("2026-07-01", "2026-12-31").catch(() => []),
+        coachStorage.listWorkoutLogsRange("2026-07-01", "2026-12-31").catch(() => []),
+        coachStorage.listBodyScans(500).catch(() => []),
+      ]);
+      // Group workouts by date
+      const byDate: Record<string, { sets: number; exercises: Set<string>; bodyParts: Set<string> }> = {};
+      for (const w of workouts) {
+        if (!byDate[w.date]) byDate[w.date] = { sets: 0, exercises: new Set(), bodyParts: new Set() };
+        byDate[w.date].sets++;
+        byDate[w.date].exercises.add(w.exercise);
+        byDate[w.date].bodyParts.add(w.targetBodyPart || "none");
+      }
+      const workoutsByDate = Object.entries(byDate).map(([d, v]) => ({
+        date: d, sets: v.sets, exercises: Array.from(v.exercises), bodyParts: Array.from(v.bodyParts),
+      })).sort((a, b) => b.date.localeCompare(a.date));
+      res.json({
+        macros: macros.map(m => ({ id: m.id, date: m.date, cal: m.calories, p: m.proteinG, f: m.fatG, c: m.carbsG })),
+        workoutsByDate,
+        weights: weights.map((w: any) => ({ id: w.id, date: w.date, weight: w.weight })),
+      });
+    } catch (e) { err(res, e); }
+  });
+
   app.get("/api/coach/context", async (_req, res) => {
     try { res.json(await buildCoachContext()); } catch (e) { err(res, e); }
   });
