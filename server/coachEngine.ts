@@ -496,7 +496,15 @@ export async function extractFromImage(imageDataUrl: string, kind: string): Prom
 
   const prompts: Record<string, string> = {
     macros: `Extract these fields from this MacroFactor (or similar macro tracker) screenshot. Return ONLY valid JSON, no prose:
-{"calories": <number|null>, "proteinG": <number|null>, "fatG": <number|null>, "carbsG": <number|null>, "netCarbsG": <number|null>, "notes": "<any anomalies>"}`,
+{"calories": <number|null>, "proteinG": <number|null>, "fatG": <number|null>, "carbsG": <number|null>, "netCarbsG": <number|null>, "notes": "<any anomalies>"}
+
+CRITICAL RULES for MacroFactor screenshots:
+- The row of M/T/W/T/F/S/S ovals at the top with day numbers is a WEEK NAV STRIP, not data. Ignore those numbers.
+- The selected/highlighted day (shown as a darker or filled oval, or named in a header like "Sun, Aug 9") is the ONLY day whose totals matter.
+- Numbers appear in "consumed / target" format like "2477 / 1607" for calories, "225 / 216" for protein, "126 / 59" for fat, "134 / 51" for carbs. Extract the LEFT number (consumed), NOT the right number (target).
+- If you see "2477 / 1607" for calories, calories = 2477.
+- Do not confuse the flame/fire icon (calories), P (protein), F (fat), C (carbs). Match the label to the number.
+- If a screenshot shows multiple days' totals side by side (true multi-day view), return all-nulls and put "multi-day view, skip" in notes.`,
     scan: `Extract these fields from this body scan (Renpho, InBody, DEXA, Wyze, etc). Return ONLY valid JSON, no prose:
 {"weight": <number|null>, "weightUnit": "lb|kg", "bodyFatPct": <number|null>, "muscleMass": <number|null>, "dailyCalorieTarget": <number|null>, "source": "<brand>", "notes": "<any anomalies>"}`,
     whoop: `Extract these fields from this Whoop screenshot. Return ONLY valid JSON, no prose:
