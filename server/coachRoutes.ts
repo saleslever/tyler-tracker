@@ -15,7 +15,7 @@ import {
   currentNutritionTarget, createNutritionTarget,
   upsertMacroLog, getMacroLog, listMacroLogsRange, deleteMacroLog,
   upsertWorkoutPlan, getWorkoutPlan,
-  logWorkoutSet, logWorkoutSets, listWorkoutLogsRange, getWorkoutLogsForDate, computeWeeklyLedger,
+  logWorkoutSet, logWorkoutSets, listWorkoutLogsRange, getWorkoutLogsForDate, computeWeeklyLedger, listBodyScans,
   upsertRecoveryLog, getRecoveryLog, latestRecoveryLog, deleteRecoveryLog,
   createUpload, listPendingUploads, confirmUpload, discardUpload,
   recentConversation,
@@ -82,9 +82,9 @@ export function registerCoachRoutes(app: Express) {
   app.get("/api/coach/debug/state", async (_req, res) => {
     try {
       const [macros, workouts, weights] = await Promise.all([
-        coachStorage.listMacroLogsRange("2026-07-01", "2026-12-31").catch(() => []),
-        coachStorage.listWorkoutLogsRange("2026-07-01", "2026-12-31").catch(() => []),
-        coachStorage.listBodyScans(500).catch(() => []),
+        listMacroLogsRange("2026-07-01", "2026-12-31").catch(() => []),
+        listWorkoutLogsRange("2026-07-01", "2026-12-31").catch(() => []),
+        listBodyScans(500).catch(() => []),
       ]);
       // Group workouts by date
       const byDate: Record<string, { sets: number; exercises: Set<string>; bodyParts: Set<string> }> = {};
