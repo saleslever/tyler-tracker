@@ -33,14 +33,14 @@ async function classifyScreenshot(imageDataUrl: string): Promise<{ kind: "weight
   const b64 = match[2];
   const prompt = `Classify this screenshot into exactly ONE category:
 - "weight": a single-day scale reading (Wyze, InBody, Renpho, DEXA) with a clear weight value
-- "macros": a single-day nutrition summary showing calories + protein/fat/carbs for ONE date
+- "macros": a nutrition summary showing calories + protein/fat/carbs for ONE selected date. This INCLUDES the MacroFactor home screen which has a small week nav strip at top (M/T/W/T/F/S/S with day numbers) followed by a highlighted day + a single day's totals like "2477/1607" for calories, "225/216" for protein, etc. The week strip is just navigation — the selected day's totals shown below it IS single-day data.
 - "workout": a strength training log for ONE session — named exercises with sets/reps/weight (redlined = completed)
 - "basketball": a basketball court session, drills, or on-court workout
-- "skip": ANYTHING ELSE, including: multi-day calendar/week views, macro trend graphs, progress-photo collages, settings, home screens, blurry images, receipts, notes, or anything without clearly structured single-session data
+- "skip": ONLY: pure trend graphs with no daily numbers, progress-photo collages, settings, home screens, blurry images, receipts, notes, or true multi-day tables where every day has its own row of numbers side by side (e.g. spreadsheet-style with cal/p/f/c for M and separately for T and separately for W all visible at once).
 
-CRITICAL: If the screenshot shows a WEEK STRIP or CALENDAR with numbers under each day (e.g. Sun/Mon/Tue/Wed with cal/protein/fat/carb rows) that is NOT a single day — return "skip" with hint="weekly calendar view".
+Rule of thumb: If exactly ONE set of totals (cal/protein/fat/carb) is visible for a selected day, it's "macros". If a header like "Sun, Aug 9" or "Today" identifies a single day, it's "macros" even if a week nav strip is above it.
 
-If you can read the single-session date on the screenshot in YYYY-MM-DD form, include it. Reject any implausible year (before 2024 or after 2027).
+If you can read the single-session date on the screenshot in YYYY-MM-DD form, include it. If the date only shows "Aug 9" assume year 2026. Reject any implausible year (before 2026 or after 2027).
 Return ONLY valid JSON: {"kind": "...", "date": "YYYY-MM-DD" or null, "hint": "one-line description"}`;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
