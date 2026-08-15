@@ -25,24 +25,34 @@ import { askCoach, generateWorkout, extractFromImage } from "./coachEngine";
 
 // Classify a screenshot into one of the ingest categories.
 // Used by the bulk-ingest admin endpoint.
-async function classifyScreenshot(imageDataUrl: string): Promise<{ kind: "weight" | "macros" | "workout" | "basketball" | "skip"; date?: string; hint?: string }> {
+async function classifyScreenshot(imageDataUrl: string): Promise<{ kind: "weight" | "macros" | "workout_completed" | "workout_planned" | "basketball" | "skip"; date?: string; hint?: string; confidence?: number; dateConfidence?: number }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { kind: "skip", hint: "no api key" };
+  if (!apiKey) return { kind: "skip", hint: "no api key", confidence: 0 };
   const match = imageDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
-  if (!match) return { kind: "skip", hint: "not a data url" };
+  if (!match) return { kind: "skip", hint: "not a data url", confidence: 0 };
   const mediaType = match[1];
   const b64 = match[2];
   const prompt = `Classify this screenshot into exactly ONE category:
 - "weight": a single-day scale reading (Wyze, InBody, Renpho, DEXA) with a clear weight value
-- "macros": a nutrition summary showing calories + protein/fat/carbs for ONE selected date. This INCLUDES the MacroFactor home screen which has a small week nav strip at top (M/T/W/T/F/S/S with day numbers) followed by a highlighted day + a single day's totals like "2477/1607" for calories, "225/216" for protein, etc. The week strip is just navigation — the selected day's totals shown below it IS single-day data.
-- "workout": a strength training log for ONE session — named exercises with sets/reps/weight (redlined = completed)
-- "basketball": a basketball court session, drills, or on-court workout
-- "skip": ONLY: pure trend graphs with no daily numbers, progress-photo collages, settings, home screens, blurry images, receipts, notes, or true multi-day tables where every day has its own row of numbers side by side (e.g. spreadsheet-style with cal/p/f/c for M and separately for T and separately for W all visible at once).
+- "macros": a nutrition summary showing calories + protein/fat/carbs for ONE selected date
+- "workout_completed": a strength training log where sets are visibly marked done (red strike-throughs, checkmarks, filled circles, "Completed" banner, or per-set weight+reps entered as history not target)
+- "workout_planned": a strength training template/plan for a FUTURE session — exercises listed with target sets/reps but no strike-throughs, no checkmarks, no completion markers. Weight fields may be blank or show last-session numbers.
+- "basketball": a basketball court session with actual performed drills (not a planned schedule)
+- "skip": trend graphs, progress-photo collages, settings pages, home screens, blurry images, receipts, notes, or spreadsheet-style multi-day tables
 
-Rule of thumb: If exactly ONE set of totals (cal/protein/fat/carb) is visible for a selected day, it's "macros". If a header like "Sun, Aug 9" or "Today" identifies a single day, it's "macros" even if a week nav strip is above it.
+CRITICAL DISTINCTION for workouts:
+- If you see red lines through exercises/sets, checkmarks, "done" badges, or the app clearly shows a session summary with performed weights/reps → "workout_completed"
+- If it looks like a program preview, tomorrow's plan, or an empty template → "workout_planned"
+- When in doubt, choose "workout_planned" (planned is safe — it doesn't affect volume counts)
 
-If you can read the single-session date on the screenshot in YYYY-MM-DD form, include it. If the date only shows "Aug 9" assume year 2026. Reject any implausible year (before 2026 or after 2027).
-Return ONLY valid JSON: {"kind": "...", "date": "YYYY-MM-DD" or null, "hint": "one-line description"}`;
+DATE extraction:
+- Read the date shown on the screenshot in YYYY-MM-DD (assume year 2026 if only month/day visible)
+- Rate your confidence 0.0-1.0 in dateConfidence: 1.0 = date is unambiguously printed on the screen, 0.5 = you can see a day-of-week but not the number, 0.0 = no date visible at all
+- If dateConfidence < 0.7, return date as null
+
+CONFIDENCE for kind: 0.0-1.0. Return < 0.75 if the screenshot is ambiguous.
+
+Return ONLY valid JSON: {"kind": "...", "date": "YYYY-MM-DD" or null, "confidence": 0.0-1.0, "dateConfidence": 0.0-1.0, "hint": "one-line description"}`;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -143,12 +153,50 @@ export function registerCoachRoutes(app: Express) {
           const cls = await classifyScreenshot(img.dataUrl);
           // Clamp to plausible date range 2026-01-01..2026-12-31
           const isPlausibleDate = (d: string) => /^2026-\d{2}-\d{2}$/.test(d);
+          const cnf = typeof cls.confidence === "number" ? cls.confidence : 1;
+          const dCnf = typeof cls.dateConfidence === "number" ? cls.dateConfidence : 1;
+          const hasReliableDate = (img.hintDate && isPlausibleDate(img.hintDate)) || (cls.date && isPlausibleDate(cls.date) && dCnf >= 0.7);
           const date = (img.hintDate && isPlausibleDate(img.hintDate))
             ? img.hintDate
-            : (cls.date && isPlausibleDate(cls.date)) ? cls.date : FALLBACK_DATE;
+            : (cls.date && isPlausibleDate(cls.date) && dCnf >= 0.7) ? cls.date : FALLBACK_DATE;
 
           if (cls.kind === "skip") {
             receipts.push({ file: img.filename, kind: "skip", result: cls.hint ?? "skipped", date });
+            continue;
+          }
+
+          // GATING: low confidence OR unreliable date → stash to review queue instead of DB
+          if (cnf < 0.75 || !hasReliableDate) {
+            await createUpload({
+              imageUrl: img.filename,
+              kind: cls.kind === "workout_completed" || cls.kind === "workout_planned" ? "workout" : cls.kind,
+              aiExtracted: { classifier: cls, guessedDate: date, hasReliableDate },
+              notes: `Low confidence: kind=${cnf.toFixed(2)}, date=${dCnf.toFixed(2)}. ${cls.hint ?? ""}`,
+            } as any);
+            receipts.push({ file: img.filename, kind: "review", result: `queued for review (conf ${cnf.toFixed(2)}/date ${dCnf.toFixed(2)})`, date });
+            continue;
+          }
+
+          // Planned workouts go to workout_plans, NOT workout_logs
+          if (cls.kind === "workout_planned") {
+            const ex = await extractFromImage(img.dataUrl, "workout");
+            if (ex.error || !Array.isArray(ex.exercises)) {
+              receipts.push({ file: img.filename, kind: "workout_planned", result: `extract fail: ${ex.error ?? "no exercises"}`, date });
+              continue;
+            }
+            try {
+              await upsertWorkoutPlan({
+                date,
+                dayType: "custom",
+                exercises: ex.exercises,
+                targetSetsByBodyPart: null,
+                notes: `imported from ${img.filename}`,
+                generatedBy: "user",
+              } as any);
+              receipts.push({ file: img.filename, kind: "workout_planned", result: `plan saved: ${ex.exercises.length} exercises for ${date}`, date });
+            } catch (e: any) {
+              receipts.push({ file: img.filename, kind: "workout_planned", result: `plan save fail: ${e?.message ?? e}`, date });
+            }
             continue;
           }
 
@@ -185,7 +233,7 @@ export function registerCoachRoutes(app: Express) {
               notes: ex.notes ?? null,
             } as any);
             receipts.push({ file: img.filename, kind: "macros", result: `macro #${(row as any).id}: ${ex.calories ?? "?"} kcal, ${ex.proteinG ?? "?"}g P`, date });
-          } else if (cls.kind === "workout" || cls.kind === "basketball") {
+          } else if (cls.kind === "workout_completed" || cls.kind === "basketball") {
             const ex = await extractFromImage(img.dataUrl, "workout");
             if (ex.error || !Array.isArray(ex.exercises)) {
               receipts.push({ file: img.filename, kind: cls.kind, result: `extract fail: ${ex.error ?? "no exercises"}`, date });
