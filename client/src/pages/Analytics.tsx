@@ -7,7 +7,7 @@
  *
  * NO invented data. Every number comes from /api/fitness/dashboard.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingDown, TrendingUp, Target, Flame, Footprints, Wine, Timer, Utensils, Dumbbell } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -296,40 +296,145 @@ function FastStat({ label, value, highlight }: { label: string; value: string; h
   );
 }
 
-// ─── Weight chart SVG ───
+// ─── Weight chart SVG — with axes, labels, hover tooltips ───
 function WeightChart({ series, targetWeight }: { series: { date: string; weight: number }[]; targetWeight: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+
   const chart = useMemo(() => {
     if (series.length === 0) return null;
-    const min = Math.min(...series.map(s => s.weight), targetWeight) - 2;
-    const max = Math.max(...series.map(s => s.weight)) + 2;
-    const range = max - min;
-    const W = 320, H = 140, P = 8;
-    const iw = W - P * 2, ih = H - P * 2;
-    const points = series.map((s, i) => {
-      const x = P + (i / Math.max(1, series.length - 1)) * iw;
-      const y = P + ((max - s.weight) / range) * ih;
+    // Show last 30 points max
+    const data = series.slice(-30);
+    const weights = data.map(s => s.weight);
+    const min = Math.floor(Math.min(...weights, targetWeight) - 1);
+    const max = Math.ceil(Math.max(...weights) + 1);
+    const range = Math.max(1, max - min);
+
+    const W = 640, H = 260;
+    const PAD_L = 44, PAD_R = 16, PAD_T = 18, PAD_B = 34;
+    const iw = W - PAD_L - PAD_R;
+    const ih = H - PAD_T - PAD_B;
+
+    const points = data.map((s, i) => {
+      const x = PAD_L + (i / Math.max(1, data.length - 1)) * iw;
+      const y = PAD_T + ((max - s.weight) / range) * ih;
       return { x, y, ...s };
     });
     const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-    const targetY = P + ((max - targetWeight) / range) * ih;
-    return { path, points, targetY, W, H };
+    const targetY = PAD_T + ((max - targetWeight) / range) * ih;
+
+    // Y grid ticks — 4 lines evenly spaced
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+      y: PAD_T + t * ih,
+      value: (max - t * range).toFixed(0),
+    }));
+
+    // X ticks — show first, middle, last with labels
+    const xTickIdxs = data.length <= 3
+      ? data.map((_, i) => i)
+      : [0, Math.floor(data.length / 2), data.length - 1];
+
+    // Trend delta
+    const first = data[0].weight;
+    const last = data[data.length - 1].weight;
+    const delta = last - first;
+    const daysSpan = Math.max(1, Math.round((new Date(data[data.length - 1].date).getTime() - new Date(data[0].date).getTime()) / 864e5));
+
+    return { path, points, targetY, W, H, PAD_L, PAD_R, PAD_T, PAD_B, iw, ih, yTicks, xTickIdxs, min, max, first, last, delta, daysSpan, data };
   }, [series, targetWeight]);
 
   if (!chart) return <div className="text-xs text-muted-foreground text-center py-6">No weight data yet.</div>;
+
+  const hoveredPoint = hover != null ? chart.points[hover] : null;
+
   return (
-    <svg viewBox={`0 0 ${chart.W} ${chart.H}`} className="w-full h-32">
-      {/* Target line */}
-      <line x1={0} x2={chart.W} y1={chart.targetY} y2={chart.targetY} stroke="hsl(var(--primary))" strokeDasharray="3 3" strokeWidth={1} opacity={0.5} />
-      <text x={chart.W - 4} y={chart.targetY - 3} fontSize="8" textAnchor="end" fill="hsl(var(--primary))" opacity={0.7}>
-        {targetWeight}
-      </text>
-      {/* Line */}
-      <path d={chart.path} fill="none" stroke="hsl(var(--foreground))" strokeWidth={1.5} />
-      {/* Points */}
-      {chart.points.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={1.5} fill="hsl(var(--primary))" />
-      ))}
-    </svg>
+    <div>
+      {/* Header: current + trend */}
+      <div className="flex items-baseline justify-between mb-2">
+        <div>
+          <div className="font-display font-black text-3xl leading-none">{chart.last.toFixed(1)}<span className="text-xs font-normal ml-1 opacity-70">lb</span></div>
+          <div className="text-[10px] tracking-widest uppercase text-muted-foreground mt-1">Latest · {chart.data[chart.data.length - 1].date}</div>
+        </div>
+        <div className={cn(
+          "text-right",
+          chart.delta < 0 ? "text-green-700" : chart.delta > 0 ? "text-primary" : "text-muted-foreground"
+        )}>
+          <div className="font-mono font-bold text-lg leading-none">
+            {chart.delta > 0 ? "+" : ""}{chart.delta.toFixed(1)} lb
+          </div>
+          <div className="text-[10px] tracking-widest uppercase mt-1">over {chart.daysSpan}d</div>
+        </div>
+      </div>
+
+      <svg viewBox={`0 0 ${chart.W} ${chart.H}`} className="w-full h-56" onMouseLeave={() => setHover(null)}>
+        {/* Y grid + labels */}
+        {chart.yTicks.map((t, i) => (
+          <g key={i}>
+            <line x1={chart.PAD_L} x2={chart.W - chart.PAD_R} y1={t.y} y2={t.y}
+              stroke="currentColor" strokeWidth={0.5} opacity={0.12} />
+            <text x={chart.PAD_L - 6} y={t.y + 3} fontSize="10" textAnchor="end"
+              fill="currentColor" opacity={0.55} className="font-mono">
+              {t.value}
+            </text>
+          </g>
+        ))}
+
+        {/* Target line — dashed */}
+        <line x1={chart.PAD_L} x2={chart.W - chart.PAD_R} y1={chart.targetY} y2={chart.targetY}
+          stroke="hsl(var(--primary))" strokeDasharray="4 3" strokeWidth={1.2} opacity={0.7} />
+        <rect x={chart.W - chart.PAD_R - 44} y={chart.targetY - 10} width={44} height={14}
+          fill="hsl(var(--primary))" opacity={0.9} rx={2} />
+        <text x={chart.W - chart.PAD_R - 4} y={chart.targetY - 1} fontSize="9" textAnchor="end"
+          fill="hsl(var(--primary-foreground))" className="font-mono font-bold">
+          GOAL {targetWeight}
+        </text>
+
+        {/* Line */}
+        <path d={chart.path} fill="none" stroke="hsl(var(--foreground))" strokeWidth={2} />
+
+        {/* Points */}
+        {chart.points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={hover === i ? 5 : 2.5}
+              fill="hsl(var(--primary))"
+              stroke="hsl(var(--background))" strokeWidth={hover === i ? 1.5 : 0} />
+            {/* Wide invisible hover target */}
+            <circle cx={p.x} cy={p.y} r={12} fill="transparent"
+              onMouseEnter={() => setHover(i)} style={{ cursor: "pointer" }} />
+          </g>
+        ))}
+
+        {/* X labels — first, middle, last */}
+        {chart.xTickIdxs.map((idx, i) => {
+          const p = chart.points[idx];
+          const label = new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          return (
+            <text key={i} x={p.x} y={chart.H - 14} fontSize="10" textAnchor={i === 0 ? "start" : i === chart.xTickIdxs.length - 1 ? "end" : "middle"}
+              fill="currentColor" opacity={0.7} className="font-mono">
+              {label}
+            </text>
+          );
+        })}
+
+        {/* Hover tooltip */}
+        {hoveredPoint && (
+          <g>
+            <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chart.PAD_T} y2={chart.H - chart.PAD_B}
+              stroke="hsl(var(--primary))" strokeWidth={1} opacity={0.35} strokeDasharray="2 2" />
+            <rect x={Math.min(hoveredPoint.x + 8, chart.W - 92)} y={Math.max(hoveredPoint.y - 30, chart.PAD_T)}
+              width={80} height={26} rx={3}
+              fill="hsl(var(--foreground))" opacity={0.92} />
+            <text x={Math.min(hoveredPoint.x + 12, chart.W - 88)} y={Math.max(hoveredPoint.y - 17, chart.PAD_T + 13)}
+              fontSize="10" fill="hsl(var(--background))" className="font-mono font-bold">
+              {hoveredPoint.weight.toFixed(1)} lb
+            </text>
+            <text x={Math.min(hoveredPoint.x + 12, chart.W - 88)} y={Math.max(hoveredPoint.y - 6, chart.PAD_T + 24)}
+              fontSize="9" fill="hsl(var(--background))" opacity={0.75} className="font-mono">
+              {new Date(hoveredPoint.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </text>
+          </g>
+        )}
+      </svg>
+    </div>
   );
 }
 

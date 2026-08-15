@@ -105,6 +105,31 @@ export function registerCoachRoutes(app: Express) {
     } catch (e) { err(res, e); }
   });
 
+  // ADMIN: Purge workout_logs rows on a single date (used to remove ingest sludge)
+  app.post("/api/coach/admin/purge-workouts-on-date", async (req, res) => {
+    try {
+      const { date, confirm } = req.body ?? {};
+      if (confirm !== "YES-DELETE") return res.status(400).json({ error: "missing confirm=YES-DELETE" });
+      const { db } = await import("./db");
+      const { workoutLogs } = await import("../shared/schemaFitnessCoach");
+      const { eq } = await import("drizzle-orm");
+      const result = await db.delete(workoutLogs).where(eq(workoutLogs.date, date)).returning();
+      res.json({ deleted: result.length, date });
+    } catch (e) { err(res, e); }
+  });
+
+  // ADMIN: Patch a macro log's date (for classifier date errors)
+  app.post("/api/coach/admin/repatch-macro-date", async (req, res) => {
+    try {
+      const { id, newDate } = req.body ?? {};
+      const { db } = await import("./db");
+      const { macroLogs } = await import("../shared/schemaFitnessCoach");
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db.update(macroLogs).set({ date: newDate } as any).where(eq(macroLogs.id, Number(id))).returning();
+      res.json({ ok: true, row });
+    } catch (e) { err(res, e); }
+  });
+
   app.get("/api/coach/context", async (_req, res) => {
     try { res.json(await buildCoachContext()); } catch (e) { err(res, e); }
   });
@@ -868,10 +893,13 @@ export function registerCoachRoutes(app: Express) {
       const totalLost = Number((startWeight - currentWeight).toFixed(1));
 
       // Weekly deltas — group weight points by ISO week, take last of each week
+      // Monday-anchored week key (YYYY-MM-DD of Monday)
       function weekKey(dateStr: string): string {
         const d = new Date(dateStr);
         const start = new Date(d);
-        start.setDate(d.getDate() - d.getDay()); // Sunday
+        const dow = d.getDay(); // Sun=0, Mon=1..Sat=6
+        const offset = dow === 0 ? 6 : dow - 1;
+        start.setDate(d.getDate() - offset); // Monday
         return start.toISOString().slice(0, 10);
       }
       const byWeek = new Map<string, { date: string; weight: number }[]>();
@@ -985,10 +1013,14 @@ export function registerCoachRoutes(app: Express) {
         .map(m => ({ date: m.date, hit: (m.proteinG ?? 0) >= 200 }));
 
       // ── Workouts this week count ──
+      // Monday-anchored week (Mon = fresh start per user rule)
       const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const dow = weekStart.getDay(); // Sun=0, Mon=1..Sat=6
+      const offsetToMonday = dow === 0 ? 6 : dow - 1;
+      weekStart.setDate(weekStart.getDate() - offsetToMonday);
       const weekStartStr = weekStart.toISOString().slice(0, 10);
       const workoutsThisWeek = new Set(workoutLogs.filter(w => w.date >= weekStartStr).map(w => w.date)).size;
+      // Note: weekStart is Monday-anchored (see mondayOf helper below)
 
       res.json({
         today,

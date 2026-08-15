@@ -235,9 +235,12 @@ export async function getWorkoutLogsForDate(date: string): Promise<WorkoutLog[]>
  * Returns { chest: 8, back: 12, ... } counting only direct-credit sets.
  */
 export async function computeWeeklyLedger(endDate: string): Promise<Record<string, number>> {
+  // Monday-anchored week (Mon = fresh start per user rule)
   const end = new Date(endDate + "T23:59:59");
+  const dow = end.getDay(); // Sun=0, Mon=1..Sat=6
+  const offsetToMonday = dow === 0 ? 6 : dow - 1;
   const start = new Date(end);
-  start.setDate(start.getDate() - 6);
+  start.setDate(end.getDate() - offsetToMonday);
   const startStr = start.toISOString().slice(0, 10);
 
   const rows = await listWorkoutLogsRange(startStr, endDate);
