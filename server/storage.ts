@@ -106,6 +106,10 @@ export async function ensureSchema() {
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_1 TEXT;
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_3 TEXT;
     ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS gratitude_possession TEXT;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS creatine INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS no_nicotine_after_3 INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS protein_hit INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS calories_hit INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS tasks (
       id SERIAL PRIMARY KEY,

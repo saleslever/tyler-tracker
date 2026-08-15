@@ -5,6 +5,7 @@ import {
   CheckSquare,
   ListTodo,
   BarChart3,
+  Database,
   BookOpen,
   Target,
   Menu,
@@ -207,10 +208,10 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         <div className="grid grid-cols-5 h-14">
           {[
-            { href: "/coach", label: "Home", icon: BarChart3 },
+            { href: "/", label: "Dashboard", icon: BarChart3 },
             { href: "/atlas", label: "Atlas", icon: MessageSquare, primary: true },
-            { href: "/generate", label: "Workout", icon: Zap },
             { href: "/habits", label: "Habits", icon: CheckSquare },
+            { href: "/data", label: "Data", icon: Database },
             { href: "/fasting", label: "Fast", icon: Timer },
           ].map((item) => {
             const Icon = item.icon;

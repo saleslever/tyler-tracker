@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Fast } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { Flame, Plus, Trash2, Utensils, Timer, TrendingUp } from "lucide-react";
+import { Flame, Plus, Trash2, Utensils, Timer, TrendingUp, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -86,6 +86,7 @@ export default function Fasting() {
   const [startEditOpen, setStartEditOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editingFast, setEditingFast] = useState<Fast | null>(null);
 
   const [pendingGoal, setPendingGoal] = useState(18);
 
@@ -168,6 +169,21 @@ export default function Fasting() {
       await queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
     } catch (e) {
       toast({ title: "Delete failed", description: (e as Error).message, variant: "destructive" });
+    }
+  }
+
+  async function updateFast(id: number, patch: { startedAt?: string; endedAt?: string | null; goalHours?: number }) {
+    setBusy(true);
+    try {
+      await apiRequest("PATCH", `/api/fasts/${id}`, patch);
+      await queryClient.invalidateQueries({ queryKey: ["/api/fasts"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      setEditingFast(null);
+      toast({ title: "Fast updated" });
+    } catch (e) {
+      toast({ title: "Update failed", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -305,7 +321,7 @@ export default function Fasting() {
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{closed.length} total</div>
           </div>
           <div className="divide-y divide-border/60">
-            {closed.slice(0, 12).map((f) => {
+            {closed.slice(0, 20).map((f) => {
               const dur = (new Date(f.endedAt!).getTime() - new Date(f.startedAt).getTime()) / 3600000;
               const hit = dur >= f.goalHours;
               return (
@@ -315,6 +331,14 @@ export default function Fasting() {
                     <div className="text-sm font-semibold">{fmtDuration(dur)} <span className="text-muted-foreground text-xs font-normal">/ {f.goalHours}h goal{f.manual === 1 ? " · manual" : ""}</span></div>
                     <div className="text-[11px] text-muted-foreground truncate">{fmtWhen(f.startedAt)} → {fmtWhen(f.endedAt!)}</div>
                   </div>
+                  <button
+                    onClick={() => setEditingFast(f)}
+                    className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                    data-testid={`btn-edit-fast-${f.id}`}
+                    aria-label="Edit fast"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={() => deleteFast(f.id)}
                     className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -387,8 +411,101 @@ export default function Fasting() {
         onClose={() => setManualOpen(false)}
         onSaved={() => setManualOpen(false)}
       />
+
+      {/* ============ Edit fast dialog ============ */}
+      <EditFastDialog
+        fast={editingFast}
+        onClose={() => setEditingFast(null)}
+        onSave={(patch) => editingFast && updateFast(editingFast.id, patch)}
+        busy={busy}
+      />
     </div>
     </div>
+  );
+}
+
+function EditFastDialog({ fast, onClose, onSave, busy }: {
+  fast: Fast | null;
+  onClose: () => void;
+  onSave: (patch: { startedAt: string; endedAt: string; goalHours: number }) => void;
+  busy: boolean;
+}) {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [goal, setGoal] = useState(18);
+
+  useEffect(() => {
+    if (fast) {
+      setStart(isoToLocalInput(fast.startedAt));
+      setEnd(fast.endedAt ? isoToLocalInput(fast.endedAt) : "");
+      setGoal(fast.goalHours ?? 18);
+    }
+  }, [fast?.id]);
+
+  const dur = useMemo(() => {
+    if (!start || !end) return 0;
+    return (new Date(end).getTime() - new Date(start).getTime()) / 3600000;
+  }, [start, end]);
+
+  return (
+    <Dialog open={!!fast} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit fast</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-muted-foreground">Started</label>
+            <Input
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-muted-foreground">Ended</label>
+            <Input
+              type="datetime-local"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-muted-foreground">Goal (hours)</label>
+            <Input
+              type="number"
+              min={1}
+              max={72}
+              value={goal}
+              onChange={(e) => setGoal(Number(e.target.value))}
+              className="mt-1"
+            />
+          </div>
+          {dur > 0 && (
+            <div className="text-xs text-muted-foreground text-center">
+              Duration: <span className="font-mono font-semibold text-foreground">{fmtDuration(dur)}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <button
+            onClick={onClose}
+            className="h-9 px-4 rounded border border-border text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave({ startedAt: localInputToIso(start), endedAt: localInputToIso(end), goalHours: goal })}
+            disabled={busy || !start || !end || dur <= 0}
+            className="h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+          >
+            Save
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

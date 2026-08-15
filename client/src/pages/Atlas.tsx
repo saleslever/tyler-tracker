@@ -1,16 +1,16 @@
 /**
- * Atlas — full-screen hero chat page (Cipher-style).
- * The Coach OS home for actually TALKING to Atlas.
- * Big centered Atlas avatar/video, huge serif ATLAS name, ONLINE·READY status,
- * intro card, 3 quick-start chips, conversation flow below, sticky input at bottom.
- * Mobile-first — matches the Cipher/Sales Lever reference exactly, but in
- * parchment/palette-2-light with a dark-mode inverse.
+ * Atlas — mobile-first full-screen chat, iMessage / Perplexity-style.
+ *
+ * Layout uses dvh so it survives iOS keyboard + safe-area.
+ * When there's no conversation: giant centered orb + intro state.
+ * When there's a conversation: compact 40px avatar in a top bar, messages
+ * scroll in the middle, input pinned at the bottom.
+ * Input clears IMMEDIATELY on send. Autoscroll uses a bottom sentinel + scrollIntoView.
  */
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Send, Paperclip, X, Play } from "lucide-react";
+import { Loader2, Send, Paperclip, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Conversation {
@@ -32,11 +32,11 @@ const QUICK_STARTS = [
 export default function Atlas() {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<{ dataUrl: string; name: string }[]>([]);
-  const [showIntro, setShowIntro] = useState(true);
-  const [playVideo, setPlayVideo] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pendingUserMsg, setPendingUserMsg] = useState<{ content: string; images: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const conversationQuery = useQuery<Conversation[]>({
     queryKey: ["/api/coach/conversation"],
@@ -50,29 +50,59 @@ export default function Atlas() {
       return res.json();
     },
     onSuccess: () => {
-      setInput("");
-      setImages([]);
-      setShowIntro(false);
+      setPendingUserMsg(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["/api/coach/conversation"] });
       queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
     },
+    onError: () => {
+      // On error, restore the text so the user doesn't lose it
+      if (pendingUserMsg) setInput(pendingUserMsg.content);
+      setPendingUserMsg(null);
+    },
   });
 
-  const messages = conversationQuery.data ?? [];
+  const serverMessages = conversationQuery.data ?? [];
+  // Optimistic: append pending user message to the visible list until server echoes it back
+  const messages: Conversation[] = pendingUserMsg
+    ? [...serverMessages, {
+        id: -1,
+        date: new Date().toISOString().slice(0, 10),
+        role: "user" as const,
+        content: pendingUserMsg.content,
+        createdAt: new Date().toISOString(),
+      }]
+    : serverMessages;
   const isThinking = sendMutation.isPending;
   const hasMessages = messages.length > 0;
 
+  // Auto-scroll to bottom whenever messages or thinking state changes
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isThinking]);
+    const el = bottomRef.current;
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, isThinking]);
+
+  // On first load with existing messages, jump straight to bottom (no smooth)
+  useEffect(() => {
+    if (serverMessages.length > 0 && scrollerRef.current) {
+      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationQuery.isSuccess]);
 
   function submit(msg?: string) {
     const trimmed = (msg ?? input).trim();
     if (sendMutation.isPending) return;
     if (!trimmed && images.length === 0) return;
-    sendMutation.mutate({ message: trimmed, imageDataUrls: images.map(i => i.dataUrl) });
+    const imageDataUrls = images.map(i => i.dataUrl);
+    // Clear input IMMEDIATELY and show user bubble optimistically
+    setPendingUserMsg({ content: trimmed, images: imageDataUrls });
+    setInput("");
+    setImages([]);
+    // Reset textarea height
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    sendMutation.mutate({ message: trimmed, imageDataUrls });
   }
 
   async function handleFiles(fileList: FileList | null) {
@@ -94,129 +124,121 @@ export default function Atlas() {
   }
 
   return (
-    <div className="parchment min-h-screen flex flex-col">
-      <div className="relative z-10 flex-1 flex flex-col max-w-2xl w-full mx-auto px-4 pt-6 pb-32">
-
-        {/* ───────── Hero — collapses once conversation begins ───────── */}
-        <div className={cn(
-          "transition-all duration-500 ease-out",
-          hasMessages ? "opacity-90" : "opacity-100"
-        )}>
-          {/* Halo + Atlas orb */}
-          <div className="relative flex justify-center mt-2 mb-6">
-            <div className={cn(
-              "relative rounded-full overflow-hidden border-2 border-primary/40 bg-black transition-all duration-500",
-              hasMessages ? "w-24 h-24" : "w-48 h-48 md:w-56 md:h-56"
-            )}>
-              {/* Halo rings */}
-              {!hasMessages && (
-                <>
-                  <div className="absolute -inset-6 rounded-full border border-primary/20 animate-pulse pointer-events-none" />
-                  <div className="absolute -inset-12 rounded-full border border-primary/10 pointer-events-none" />
-                </>
-              )}
-              <video
-                ref={videoRef}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              >
-                <source src="/atlas-loop.mp4" type="video/mp4" />
-              </video>
-              {/* Corner data ticks — the HUD detail */}
-              <div className="absolute top-2 left-2 text-[8px] tracking-widest text-primary/70 font-mono">TGT:195</div>
-              <div className="absolute top-2 right-2 text-[8px] tracking-widest text-primary/70 font-mono">D-{daysUntilBirthday()}</div>
-              <div className="absolute bottom-2 left-2 text-[8px] tracking-widest text-primary/70 font-mono">STR:16</div>
-              <div className="absolute bottom-2 right-2 text-[8px] tracking-widest text-primary/70 font-mono">18/WK</div>
-            </div>
+    <div
+      className="parchment flex flex-col overflow-hidden"
+      style={{ height: "100dvh" }}
+    >
+      {/* ─── TOP BAR (only when messages exist) ─── */}
+      {hasMessages && (
+        <div
+          className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
+        >
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
+            <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+              <source src="/atlas-loop.mp4" type="video/mp4" />
+            </video>
           </div>
-
-          {/* Name */}
-          <h1 className={cn(
-            "font-display text-center font-black tracking-[0.16em] leading-none text-foreground transition-all duration-500",
-            hasMessages ? "text-2xl md:text-3xl" : "text-6xl md:text-7xl"
-          )}>
-            ATLAS
-          </h1>
-
-          {/* Tagline */}
-          {!hasMessages && (
-            <p className="mt-4 text-center text-sm md:text-base text-muted-foreground italic px-4">
-              Coach OS · Forging your 195lb frame by March 6, 2027
-            </p>
-          )}
-
-          {/* Status pill */}
-          <div className={cn(
-            "flex items-center justify-center gap-2 transition-all duration-500",
-            hasMessages ? "mt-3" : "mt-6"
-          )}>
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs tracking-[0.28em] uppercase text-primary font-semibold">
-              Online · Ready
-            </span>
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-lg font-bold tracking-[0.14em] leading-none">ATLAS</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="text-[9px] tracking-[0.24em] uppercase text-primary font-semibold">Online · Ready</span>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* ───────── Intro card — hidden once conversation starts ───────── */}
-        {!hasMessages && showIntro && (
-          <>
-            <div className="mt-8 flex items-start gap-3 mx-2">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/40 flex-shrink-0 bg-black">
-                <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                  <source src="/atlas-loop.mp4" type="video/mp4" />
-                </video>
-              </div>
-              <div className="bg-card border border-card-border rounded-lg px-4 py-3 text-sm leading-relaxed">
-                I'm <span className="text-primary font-semibold">Atlas</span>. I have live access to your fitness data,
-                habits, weekly training log, and body-scan history. Send me a
-                workout to save, a macro screenshot to log, or ask me anything.
-              </div>
-            </div>
-
-            {/* Quick-start chips */}
-            <div className="mt-6 flex flex-wrap justify-center gap-2 px-2">
-              {QUICK_STARTS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => submit(q)}
-                  className="text-xs px-4 py-2 rounded-full bg-card border border-card-border hover:border-primary hover:bg-primary/5 transition tracking-wide"
-                  data-testid={`quickstart-${q.slice(0,10)}`}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </>
+      {/* ─── MESSAGES SCROLLER ─── */}
+      <div
+        ref={scrollerRef}
+        className={cn(
+          "flex-1 overflow-y-auto overscroll-contain",
+          !hasMessages && "flex flex-col justify-center"
         )}
+        style={{ WebkitOverflowScrolling: "touch" } as any}
+      >
+        <div className="max-w-2xl w-full mx-auto px-4">
 
-        {/* ───────── Conversation ───────── */}
-        {hasMessages && (
-          <div ref={scrollRef} className="mt-8 space-y-4 flex-1 overflow-y-auto">
-            {messages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
-            {isThinking && (
-              <div className="flex justify-start">
-                <div className="bg-card border border-card-border rounded-lg px-4 py-3 flex items-center gap-2">
-                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                  <span className="text-xs tracking-widest uppercase text-muted-foreground">Atlas analyzing</span>
+          {/* ── HERO (no messages) ── */}
+          {!hasMessages && (
+            <div className="py-6 flex flex-col items-center">
+              <div className="relative">
+                <div className="absolute -inset-6 rounded-full border border-primary/20 animate-pulse pointer-events-none" />
+                <div className="absolute -inset-14 rounded-full border border-primary/10 pointer-events-none" />
+                <div className="absolute -inset-24 rounded-full border border-primary/5 pointer-events-none" />
+                <div className="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full overflow-hidden border border-primary/30 bg-black shadow-2xl">
+                  <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                    <source src="/atlas-loop.mp4" type="video/mp4" />
+                  </video>
                 </div>
               </div>
-            )}
-          </div>
-        )}
+
+              <h1 className="mt-8 font-display text-5xl sm:text-6xl font-black tracking-[0.16em] leading-none">
+                ATLAS
+              </h1>
+
+              <p className="mt-4 text-center text-sm text-muted-foreground italic px-6">
+                Coach OS · Forging your 195lb frame by March 6, 2027
+              </p>
+
+              <div className="mt-5 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-[10px] tracking-[0.28em] uppercase text-primary font-semibold">
+                  Online · Ready
+                </span>
+              </div>
+
+              {/* Quick-start chips */}
+              <div className="mt-8 flex flex-wrap justify-center gap-2 px-2">
+                {QUICK_STARTS.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => submit(q)}
+                    className="text-xs px-4 py-2 rounded-full bg-card border border-card-border hover:border-primary hover:bg-primary/5 transition tracking-wide"
+                    data-testid={`quickstart-${q.slice(0,10)}`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── CONVERSATION ── */}
+          {hasMessages && (
+            <div className="py-4 space-y-3">
+              {messages.map((m) => (
+                <MessageBubble key={m.id} message={m} />
+              ))}
+              {isThinking && (
+                <div className="flex justify-start">
+                  <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/40 flex-shrink-0 mr-2 bg-black">
+                    <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                      <source src="/atlas-loop.mp4" type="video/mp4" />
+                    </video>
+                  </div>
+                  <div className="bg-card border border-card-border rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ───────── Sticky input ───────── */}
+      {/* ─── INPUT (pinned) ─── */}
       <div
-        className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-background via-background to-transparent pt-4 pb-4 md:pb-6"
-        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}
+        className="flex-shrink-0 border-t border-border/40 bg-background/95 backdrop-blur"
+        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }}
       >
-        {/* Reserve room for bottom nav on mobile */}
-        <div className="max-w-2xl mx-auto px-4 md:mb-0 mb-14">
+        <div className="max-w-2xl mx-auto px-3 pt-2 pb-2">
           {images.length > 0 && (
             <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
               {images.map((img, i) => (
@@ -233,10 +255,10 @@ export default function Atlas() {
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2 bg-card border border-card-border rounded-2xl px-3 py-2 shadow-lg">
+          <div className="flex items-end gap-2 bg-card border border-card-border rounded-2xl px-2 py-1.5 shadow-sm">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 rounded-full hover:bg-primary/5 flex-shrink-0"
+              className="p-2 rounded-full hover:bg-primary/5 flex-shrink-0 self-end"
               aria-label="Attach image"
               data-testid="button-attach"
             >
@@ -250,48 +272,45 @@ export default function Atlas() {
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
             />
-            <Textarea
+            <textarea
+              ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-grow up to 5 rows
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
-              placeholder="Talk to Atlas... or paste a workout / macro screenshot"
+              placeholder="Talk to Atlas…"
               rows={1}
-              className="flex-1 resize-none border-0 focus-visible:ring-0 bg-transparent min-h-[40px] max-h-32 text-sm"
+              className="flex-1 resize-none bg-transparent focus:outline-none py-2 text-[15px] leading-snug min-h-[36px] max-h-32"
               data-testid="input-atlas-message"
             />
             <button
               onClick={() => submit()}
               disabled={isThinking || (!input.trim() && images.length === 0)}
-              className="p-2 rounded-full bg-primary text-primary-foreground disabled:opacity-40 hover:opacity-90 flex-shrink-0"
+              className="p-2.5 rounded-full bg-primary text-primary-foreground disabled:opacity-30 hover:opacity-90 flex-shrink-0 self-end transition-opacity"
               data-testid="button-send"
               aria-label="Send"
             >
               {isThinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </div>
-          <p className="text-[10px] text-center text-muted-foreground/70 mt-2 tracking-wide">
-            Atlas remembers everything. Direct, honest, no bullshit.
-          </p>
         </div>
       </div>
+      {/* Reserve room for bottom nav on mobile */}
+      <div className="h-14 md:hidden flex-shrink-0" />
     </div>
   );
 }
 
-// ─── Days-until-birthday helper (goal deadline 3/6/27) ───
-function daysUntilBirthday(): number {
-  const now = new Date();
-  const target = new Date("2027-03-06T00:00:00");
-  const ms = target.getTime() - now.getTime();
-  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
-}
-
-// ─── Message bubble w/ decision-card save (matches Coach.tsx behavior) ───
+// ─── Message bubble w/ decision-card save ───
 function MessageBubble({ message }: { message: Conversation }) {
   const isUser = message.role === "user";
   const proposed = message.decisions?.workoutPlanToSet;
@@ -315,16 +334,16 @@ function MessageBubble({ message }: { message: Conversation }) {
   });
 
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex items-end gap-2", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/40 flex-shrink-0 mr-2 mt-1 bg-black">
+        <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/40 flex-shrink-0 bg-black">
           <video autoPlay loop muted playsInline className="w-full h-full object-cover">
             <source src="/atlas-loop.mp4" type="video/mp4" />
           </video>
         </div>
       )}
       <div className={cn(
-        "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+        "max-w-[80%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed shadow-sm",
         isUser
           ? "bg-primary text-primary-foreground rounded-br-sm"
           : "bg-card border border-card-border text-foreground rounded-bl-sm"
