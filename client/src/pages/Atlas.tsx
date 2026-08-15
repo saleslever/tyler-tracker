@@ -91,10 +91,33 @@ export default function Atlas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationQuery.isSuccess]);
 
+  // Tiny click sound via Web Audio + iOS haptic
+  function playClickSound() {
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+      setTimeout(() => ctx.close?.(), 200);
+    } catch { /* ignore */ }
+    try { (navigator as any).vibrate?.(8); } catch { /* ignore */ }
+  }
+
   function submit(msg?: string) {
     const trimmed = (msg ?? input).trim();
     if (sendMutation.isPending) return;
     if (!trimmed && images.length === 0) return;
+    playClickSound();
     const imageDataUrls = images.map(i => i.dataUrl);
     // Clear input IMMEDIATELY and show user bubble optimistically
     setPendingUserMsg({ content: trimmed, images: imageDataUrls });
@@ -131,7 +154,7 @@ export default function Atlas() {
       <div
         ref={scrollerRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain relative",
+          "flex-1 overflow-y-auto overscroll-contain relative min-h-0",
           !hasMessages && "flex flex-col justify-center"
         )}
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" } as any}
