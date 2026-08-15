@@ -31,14 +31,16 @@ async function classifyScreenshot(imageDataUrl: string): Promise<{ kind: "weight
   if (!match) return { kind: "skip", hint: "not a data url" };
   const mediaType = match[1];
   const b64 = match[2];
-  const prompt = `Classify this screenshot into exactly ONE of these categories:
-- "weight": Wyze scale, InBody, Renpho, or any bodyweight/body-composition screen
-- "macros": MacroFactor, Cronometer, MyFitnessPal, or any daily calorie/macro summary
-- "workout": strength training log — exercises with sets/reps/weight (redlined = completed)
-- "basketball": basketball workout, court session, shooting drills
-- "skip": anything else (settings, chat, home screen, blurry, etc.)
+  const prompt = `Classify this screenshot into exactly ONE category:
+- "weight": a single-day scale reading (Wyze, InBody, Renpho, DEXA) with a clear weight value
+- "macros": a single-day nutrition summary showing calories + protein/fat/carbs for ONE date
+- "workout": a strength training log for ONE session — named exercises with sets/reps/weight (redlined = completed)
+- "basketball": a basketball court session, drills, or on-court workout
+- "skip": ANYTHING ELSE, including: multi-day calendar/week views, macro trend graphs, progress-photo collages, settings, home screens, blurry images, receipts, notes, or anything without clearly structured single-session data
 
-If you can read a date on the screenshot in YYYY-MM-DD form, include it.
+CRITICAL: If the screenshot shows a WEEK STRIP or CALENDAR with numbers under each day (e.g. Sun/Mon/Tue/Wed with cal/protein/fat/carb rows) that is NOT a single day — return "skip" with hint="weekly calendar view".
+
+If you can read the single-session date on the screenshot in YYYY-MM-DD form, include it. Reject any implausible year (before 2024 or after 2027).
 Return ONLY valid JSON: {"kind": "...", "date": "YYYY-MM-DD" or null, "hint": "one-line description"}`;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -92,9 +94,11 @@ export function registerCoachRoutes(app: Express) {
       for (const img of images) {
         try {
           const cls = await classifyScreenshot(img.dataUrl);
-          const date = (img.hintDate && /^\d{4}-\d{2}-\d{2}$/.test(img.hintDate))
+          // Clamp to plausible date range 2026-01-01..2026-12-31
+          const isPlausibleDate = (d: string) => /^2026-\d{2}-\d{2}$/.test(d);
+          const date = (img.hintDate && isPlausibleDate(img.hintDate))
             ? img.hintDate
-            : (cls.date && /^\d{4}-\d{2}-\d{2}$/.test(cls.date)) ? cls.date : FALLBACK_DATE;
+            : (cls.date && isPlausibleDate(cls.date)) ? cls.date : FALLBACK_DATE;
 
           if (cls.kind === "skip") {
             receipts.push({ file: img.filename, kind: "skip", result: cls.hint ?? "skipped", date });
@@ -140,19 +144,33 @@ export function registerCoachRoutes(app: Express) {
               receipts.push({ file: img.filename, kind: cls.kind, result: `extract fail: ${ex.error ?? "no exercises"}`, date });
               continue;
             }
+            // Normalize body parts to the schema whitelist
+            const normalize = (bp: string): string => {
+              const map: Record<string, string> = {
+                biceps_long: "biceps", biceps_short: "biceps", brachialis: "biceps",
+                forearms: "biceps", traps: "back",
+              };
+              return map[bp] ?? bp;
+            };
             const sets: any[] = [];
             for (const e1 of ex.exercises) {
-              const target = cls.kind === "basketball" ? "basketball" : (e1.targetBodyPart ?? "none");
-              const setCount = Number(e1.sets) || 1;
+              const rawTarget = cls.kind === "basketball" ? "basketball" : (e1.targetBodyPart ?? "none");
+              const target = normalize(rawTarget);
+              const setCount = Math.min(Number(e1.sets) || 1, 10); // cap runaway set counts
+              // Parse weight and reps carefully: strip commas and units, keep first number only
+              const parseFirstNum = (s: any): number | null => {
+                if (s == null) return null;
+                const cleaned = String(s).replace(/,/g, "");
+                const m = cleaned.match(/(\d+(?:\.\d+)?)/);
+                return m ? parseFloat(m[1]) : null;
+              };
               for (let i = 1; i <= setCount; i++) {
-                const wStr = String(e1.weight ?? "").replace(/[^\d.]/g, "");
-                const rStr = String(e1.reps ?? "").replace(/[^\d.]/g, "").split(".")[0];
                 sets.push({
                   date,
-                  exerciseName: e1.name,
+                  exercise: e1.name || "unknown",
                   setNumber: i,
-                  reps: rStr ? parseInt(rStr) : null,
-                  weight: wStr ? parseFloat(wStr) : null,
+                  reps: parseFirstNum(e1.reps),
+                  weight: parseFirstNum(e1.weight),
                   weightUnit: "lb",
                   targetBodyPart: target,
                   rpe: null,
