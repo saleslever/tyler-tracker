@@ -127,36 +127,35 @@ export default function Atlas() {
     <div
       className="parchment flex flex-col overflow-hidden atlas-shell"
     >
-      {/* ─── TOP BAR (only when messages exist) ─── */}
-      {hasMessages && (
-        <div
-          className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur"
-          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
-        >
-          <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
-            <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-              <source src="/atlas-loop.mp4" type="video/mp4" />
-            </video>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-display text-lg font-bold tracking-[0.14em] leading-none">ATLAS</div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="text-[9px] tracking-[0.24em] uppercase text-primary font-semibold">Online · Ready</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MESSAGES SCROLLER ─── */}
+      {/* ─── MESSAGES SCROLLER (with sticky top bar inside) ─── */}
       <div
         ref={scrollerRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain",
+          "flex-1 overflow-y-auto overscroll-contain relative",
           !hasMessages && "flex flex-col justify-center"
         )}
-        style={{ WebkitOverflowScrolling: "touch" } as any}
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" } as any}
       >
+        {/* Sticky Atlas header — stays visible while scrolling */}
+        {hasMessages && (
+          <div
+            className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/90 backdrop-blur"
+          >
+            <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
+              <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                <source src="/atlas-loop.mp4" type="video/mp4" />
+              </video>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display text-lg font-bold tracking-[0.14em] leading-none">ATLAS</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-[9px] tracking-[0.24em] uppercase text-primary font-semibold">Online · Ready</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-2xl w-full mx-auto px-4">
 
           {/* ── HERO (no messages) ── */}

@@ -162,13 +162,14 @@
   .mobile-safe-bottom { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
 
   /* Atlas chat shell — fill the viewport between the fixed mobile top bar and bottom nav.
-     On desktop, both bars disappear (md:hidden) so we just fill the viewport height. */
+     Bottom clearance is 3.5rem nav + 0.75rem for the primary Atlas button that pokes up,
+     plus the iOS safe-area inset. On desktop, both bars disappear (md:hidden). */
   .atlas-shell {
     position: fixed;
     left: 0;
     right: 0;
     top: calc(3.5rem + env(safe-area-inset-top, 0px));
-    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
     z-index: 30;
   }
   @media (min-width: 768px) {
