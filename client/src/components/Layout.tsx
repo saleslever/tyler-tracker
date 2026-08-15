@@ -30,7 +30,7 @@ const NAV = [
   {
     section: "Coach",
     items: [
-      { href: "/coach", label: "Coach", icon: MessageSquare },
+      { href: "/atlas", label: "Atlas", icon: MessageSquare },
       { href: "/uploads", label: "Bulk Uploads", icon: UploadIcon },
     ],
   },
@@ -156,7 +156,7 @@ export function Layout({ children }: { children: ReactNode }) {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
-                const showNag = item.href === "/coach" && nagCount > 0;
+                const showNag = item.href === "/atlas" && nagCount > 0;
                 return (
                   <Link key={item.href} href={item.href}>
                     <div

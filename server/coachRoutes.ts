@@ -21,6 +21,47 @@ import {
   recentConversation,
 } from "./coachStorage";
 import { askCoach, generateWorkout, extractFromImage } from "./coachEngine";
+
+// Classify a screenshot into one of the ingest categories.
+// Used by the bulk-ingest admin endpoint.
+async function classifyScreenshot(imageDataUrl: string): Promise<{ kind: "weight" | "macros" | "workout" | "basketball" | "skip"; date?: string; hint?: string }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { kind: "skip", hint: "no api key" };
+  const match = imageDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+  if (!match) return { kind: "skip", hint: "not a data url" };
+  const mediaType = match[1];
+  const b64 = match[2];
+  const prompt = `Classify this screenshot into exactly ONE of these categories:
+- "weight": Wyze scale, InBody, Renpho, or any bodyweight/body-composition screen
+- "macros": MacroFactor, Cronometer, MyFitnessPal, or any daily calorie/macro summary
+- "workout": strength training log — exercises with sets/reps/weight (redlined = completed)
+- "basketball": basketball workout, court session, shooting drills
+- "skip": anything else (settings, chat, home screen, blurry, etc.)
+
+If you can read a date on the screenshot in YYYY-MM-DD form, include it.
+Return ONLY valid JSON: {"kind": "...", "date": "YYYY-MM-DD" or null, "hint": "one-line description"}`;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 300,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+          { type: "text", text: prompt },
+        ] }],
+      }),
+    });
+    const data = await res.json() as any;
+    const text = data.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { kind: "skip", hint: "no json" };
+    return JSON.parse(jsonMatch[0]);
+  } catch (e: any) {
+    return { kind: "skip", hint: `classify error: ${e?.message ?? String(e)}` };
+  }
+}
 import {
   insertCoachSettingsSchema, insertCoachMemorySchema, insertCoachChecklistSchema,
   insertFitnessGoalSchema, insertBodyScanSchema, insertNutritionTargetSchema,
@@ -37,6 +78,106 @@ export function registerCoachRoutes(app: Express) {
   // ─── Context snapshot ─────────────────────────────────────────
   app.get("/api/coach/context", async (_req, res) => {
     try { res.json(await buildCoachContext()); } catch (e) { err(res, e); }
+  });
+
+  // ─── Bulk ingest (admin — bulk-process a batch of screenshots) ───
+  app.post("/api/coach/bulk-ingest", async (req, res) => {
+    try {
+      const images: Array<{ filename: string; dataUrl: string; hintDate?: string }> = req.body?.images ?? [];
+      if (!Array.isArray(images) || images.length === 0) throw new Error("images[] required");
+
+      const receipts: Array<{ file: string; kind: string; result: string; date?: string }> = [];
+      const FALLBACK_DATE = new Date().toISOString().slice(0, 10);
+
+      for (const img of images) {
+        try {
+          const cls = await classifyScreenshot(img.dataUrl);
+          const date = (img.hintDate && /^\d{4}-\d{2}-\d{2}$/.test(img.hintDate))
+            ? img.hintDate
+            : (cls.date && /^\d{4}-\d{2}-\d{2}$/.test(cls.date)) ? cls.date : FALLBACK_DATE;
+
+          if (cls.kind === "skip") {
+            receipts.push({ file: img.filename, kind: "skip", result: cls.hint ?? "skipped", date });
+            continue;
+          }
+
+          if (cls.kind === "weight") {
+            const ex = await extractFromImage(img.dataUrl, "scan");
+            if (ex.error || typeof ex.weight !== "number") {
+              receipts.push({ file: img.filename, kind: "weight", result: `extract fail: ${ex.error ?? "no weight"}`, date });
+              continue;
+            }
+            const row = await createBodyScan({
+              date,
+              weight: ex.weight,
+              bodyFatPct: ex.bodyFatPct ?? null,
+              muscleMass: ex.muscleMass ?? null,
+              dailyCalorieTarget: null,
+              source: ex.source ?? "Wyze",
+              notes: ex.notes ?? null,
+            } as any);
+            receipts.push({ file: img.filename, kind: "weight", result: `body_scan #${(row as any).id}: ${ex.weight} lb${ex.bodyFatPct ? `, ${ex.bodyFatPct}% BF` : ""}`, date });
+          } else if (cls.kind === "macros") {
+            const ex = await extractFromImage(img.dataUrl, "macros");
+            if (ex.error) {
+              receipts.push({ file: img.filename, kind: "macros", result: `extract fail: ${ex.error}`, date });
+              continue;
+            }
+            const row = await upsertMacroLog({
+              date,
+              calories: ex.calories ?? null,
+              proteinG: ex.proteinG ?? null,
+              fatG: ex.fatG ?? null,
+              carbsG: ex.carbsG ?? null,
+              netCarbsG: ex.netCarbsG ?? null,
+              source: "MacroFactor",
+              notes: ex.notes ?? null,
+            } as any);
+            receipts.push({ file: img.filename, kind: "macros", result: `macro #${(row as any).id}: ${ex.calories ?? "?"} kcal, ${ex.proteinG ?? "?"}g P`, date });
+          } else if (cls.kind === "workout" || cls.kind === "basketball") {
+            const ex = await extractFromImage(img.dataUrl, "workout");
+            if (ex.error || !Array.isArray(ex.exercises)) {
+              receipts.push({ file: img.filename, kind: cls.kind, result: `extract fail: ${ex.error ?? "no exercises"}`, date });
+              continue;
+            }
+            const sets: any[] = [];
+            for (const e1 of ex.exercises) {
+              const target = cls.kind === "basketball" ? "basketball" : (e1.targetBodyPart ?? "none");
+              const setCount = Number(e1.sets) || 1;
+              for (let i = 1; i <= setCount; i++) {
+                const wStr = String(e1.weight ?? "").replace(/[^\d.]/g, "");
+                const rStr = String(e1.reps ?? "").replace(/[^\d.]/g, "").split(".")[0];
+                sets.push({
+                  date,
+                  exerciseName: e1.name,
+                  setNumber: i,
+                  reps: rStr ? parseInt(rStr) : null,
+                  weight: wStr ? parseFloat(wStr) : null,
+                  weightUnit: "lb",
+                  targetBodyPart: target,
+                  rpe: null,
+                  notes: null,
+                });
+              }
+            }
+            if (sets.length === 0) {
+              receipts.push({ file: img.filename, kind: cls.kind, result: "no sets found", date });
+              continue;
+            }
+            const rows = await logWorkoutSets(sets as any);
+            receipts.push({ file: img.filename, kind: cls.kind, result: `${rows.length} sets across ${ex.exercises.length} exercises`, date });
+          } else {
+            receipts.push({ file: img.filename, kind: cls.kind, result: `unknown kind`, date });
+          }
+        } catch (e: any) {
+          receipts.push({ file: img.filename, kind: "error", result: e?.message ?? String(e) });
+        }
+      }
+
+      const summary: Record<string, number> = {};
+      for (const r of receipts) summary[r.kind] = (summary[r.kind] ?? 0) + 1;
+      res.json({ ok: true, summary, receipts });
+    } catch (e) { err(res, e); }
   });
 
   // ─── Undo (mutable log types only) ──────────────────────────
