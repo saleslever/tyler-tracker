@@ -16,6 +16,7 @@ import {
   upsertMacroLog, getMacroLog, listMacroLogsRange, deleteMacroLog,
   upsertWorkoutPlan, getWorkoutPlan,
   logWorkoutSet, logWorkoutSets, listWorkoutLogsRange, getWorkoutLogsForDate, computeWeeklyLedger, listBodyScans,
+  adminPurgeWorkoutsOnDate, adminRepatchMacroDate,
   upsertRecoveryLog, getRecoveryLog, latestRecoveryLog, deleteRecoveryLog,
   createUpload, listPendingUploads, confirmUpload, discardUpload,
   recentConversation,
@@ -110,11 +111,8 @@ export function registerCoachRoutes(app: Express) {
     try {
       const { date, confirm } = req.body ?? {};
       if (confirm !== "YES-DELETE") return res.status(400).json({ error: "missing confirm=YES-DELETE" });
-      const { db } = await import("./db");
-      const { workoutLogs } = await import("../shared/schemaFitnessCoach");
-      const { eq } = await import("drizzle-orm");
-      const result = await db.delete(workoutLogs).where(eq(workoutLogs.date, date)).returning();
-      res.json({ deleted: result.length, date });
+      const result = await adminPurgeWorkoutsOnDate(date);
+      res.json({ deleted: result, date });
     } catch (e) { err(res, e); }
   });
 
@@ -122,10 +120,7 @@ export function registerCoachRoutes(app: Express) {
   app.post("/api/coach/admin/repatch-macro-date", async (req, res) => {
     try {
       const { id, newDate } = req.body ?? {};
-      const { db } = await import("./db");
-      const { macroLogs } = await import("../shared/schemaFitnessCoach");
-      const { eq } = await import("drizzle-orm");
-      const [row] = await db.update(macroLogs).set({ date: newDate } as any).where(eq(macroLogs.id, Number(id))).returning();
+      const row = await adminRepatchMacroDate(Number(id), newDate);
       res.json({ ok: true, row });
     } catch (e) { err(res, e); }
   });

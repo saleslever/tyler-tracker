@@ -348,3 +348,14 @@ export async function buildCoachContext(): Promise<CoachContext> {
   ]);
   return { today: t, settings, goal, target, latestScan, latestRecovery, todayMacros, todayPlan, weeklyLedger, memory, todayChecklist, recentTurns };
 }
+
+// ─── Admin operations ─────────────────────────────────────────
+export async function adminPurgeWorkoutsOnDate(date: string): Promise<number> {
+  const result = await db.delete(workoutLogs).where(eq(workoutLogs.date, date)).returning();
+  return result.length;
+}
+
+export async function adminRepatchMacroDate(id: number, newDate: string): Promise<MacroLog | undefined> {
+  const [row] = await db.update(macroLogs).set({ date: newDate } as any).where(eq(macroLogs.id, id)).returning();
+  return row;
+}
