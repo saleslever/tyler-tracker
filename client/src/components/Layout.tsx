@@ -31,7 +31,6 @@ const NAV = [
     section: "Coach",
     items: [
       { href: "/coach", label: "Coach", icon: MessageSquare },
-      { href: "/generate", label: "Generate Workout", icon: Zap },
       { href: "/uploads", label: "Bulk Uploads", icon: UploadIcon },
     ],
   },

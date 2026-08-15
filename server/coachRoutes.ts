@@ -11,12 +11,12 @@ import {
   listCoachMemory, addCoachMemory, supersedeMemory, deactivateMemory,
   getChecklist, addChecklistItem, markChecklistDone, markChecklistMissed,
   getActiveGoal, createGoal, listGoalHistory,
-  createBodyScan, listBodyScans, latestBodyScan,
+  createBodyScan, listBodyScans, latestBodyScan, deleteBodyScan,
   currentNutritionTarget, createNutritionTarget,
-  upsertMacroLog, getMacroLog, listMacroLogsRange,
+  upsertMacroLog, getMacroLog, listMacroLogsRange, deleteMacroLog,
   upsertWorkoutPlan, getWorkoutPlan,
   logWorkoutSet, logWorkoutSets, listWorkoutLogsRange, getWorkoutLogsForDate, computeWeeklyLedger,
-  upsertRecoveryLog, getRecoveryLog, latestRecoveryLog,
+  upsertRecoveryLog, getRecoveryLog, latestRecoveryLog, deleteRecoveryLog,
   createUpload, listPendingUploads, confirmUpload, discardUpload,
   recentConversation,
 } from "./coachStorage";
@@ -37,6 +37,32 @@ export function registerCoachRoutes(app: Express) {
   // ─── Context snapshot ─────────────────────────────────────────
   app.get("/api/coach/context", async (_req, res) => {
     try { res.json(await buildCoachContext()); } catch (e) { err(res, e); }
+  });
+
+  // ─── Undo (mutable log types only) ──────────────────────────
+  app.post("/api/coach/undo/body_scan", async (req, res) => {
+    try {
+      const id = Number(req.body?.id);
+      if (!Number.isFinite(id)) throw new Error("id required");
+      await deleteBodyScan(id);
+      res.json({ ok: true });
+    } catch (e) { err(res, e); }
+  });
+  app.post("/api/coach/undo/macro", async (req, res) => {
+    try {
+      const id = Number(req.body?.id);
+      if (!Number.isFinite(id)) throw new Error("id required");
+      await deleteMacroLog(id);
+      res.json({ ok: true });
+    } catch (e) { err(res, e); }
+  });
+  app.post("/api/coach/undo/recovery", async (req, res) => {
+    try {
+      const id = Number(req.body?.id);
+      if (!Number.isFinite(id)) throw new Error("id required");
+      await deleteRecoveryLog(id);
+      res.json({ ok: true });
+    } catch (e) { err(res, e); }
   });
 
   // ─── Chat ─────────────────────────────────────────────────────

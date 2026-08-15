@@ -142,6 +142,9 @@ export async function latestBodyScan(): Promise<BodyScan | undefined> {
   const rows = await db.select().from(bodyScans).orderBy(desc(bodyScans.date)).limit(1);
   return rows[0];
 }
+export async function deleteBodyScan(id: number): Promise<void> {
+  await db.delete(bodyScans).where(eq(bodyScans.id, id));
+}
 
 // ─── Nutrition targets ───────────────────────────────────────
 export async function currentNutritionTarget(): Promise<NutritionTarget | undefined> {
@@ -176,6 +179,9 @@ export async function listMacroLogsRange(start: string, end: string): Promise<Ma
   return db.select().from(macroLogs)
     .where(and(gte(macroLogs.date, start), lte(macroLogs.date, end)))
     .orderBy(desc(macroLogs.date));
+}
+export async function deleteMacroLog(id: number): Promise<void> {
+  await db.delete(macroLogs).where(eq(macroLogs.id, id));
 }
 
 // ─── Workout plans ───────────────────────────────────────────
@@ -263,6 +269,9 @@ export async function getRecoveryLog(date: string): Promise<RecoveryLog | undefi
 export async function latestRecoveryLog(): Promise<RecoveryLog | undefined> {
   const rows = await db.select().from(recoveryLogs).orderBy(desc(recoveryLogs.date)).limit(1);
   return rows[0];
+}
+export async function deleteRecoveryLog(id: number): Promise<void> {
+  await db.delete(recoveryLogs).where(eq(recoveryLogs.id, id));
 }
 
 // ─── Uploads ─────────────────────────────────────────────────

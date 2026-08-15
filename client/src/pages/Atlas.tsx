@@ -378,28 +378,25 @@ function MarkdownLite({ content }: { content: string }) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
-// ─── Message bubble w/ decision-card save ───
+// ─── Message bubble + auto-extraction receipt ───
 function MessageBubble({ message }: { message: Conversation }) {
   const isUser = message.role === "user";
-  const proposed = message.decisions?.workoutPlanToSet;
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!proposed) return;
-      const r = await apiRequest("POST", "/api/fitness/workouts/plan", {
-        date: proposed.date,
-        dayType: proposed.dayType,
-        exercises: proposed.exercises,
-        targetSetsByBodyPart: proposed.targetSetsByBodyPart ?? {},
-        source: "coach_chat",
-      });
-      return r.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts/plan"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
-    },
-  });
+  const logged = (message.decisions as any)?.logged as Array<{
+    type: string;
+    summary: string;
+    id?: string;
+    undoUrl?: string;
+  }> | undefined;
+
+  const [undone, setUndone] = useState<Record<string, boolean>>({});
+  const doUndo = async (item: { id?: string; undoUrl?: string }, key: string) => {
+    if (!item.undoUrl) return;
+    await apiRequest("POST", item.undoUrl, { id: item.id });
+    setUndone((s) => ({ ...s, [key]: true }));
+    queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/logs/recent"] });
+  };
 
   return (
     <div className={cn("flex items-end gap-2", isUser ? "justify-end" : "justify-start")}>
@@ -419,37 +416,32 @@ function MessageBubble({ message }: { message: Conversation }) {
         {isUser
           ? <div className="whitespace-pre-wrap">{message.content}</div>
           : <MarkdownLite content={message.content} />}
-        {proposed && Array.isArray(proposed.exercises) && proposed.exercises.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-current/10">
-            <div className="text-[10px] tracking-[0.22em] uppercase font-bold mb-2 text-primary">
-              Proposed Workout · {proposed.date} · {proposed.dayType}
+        {logged && logged.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-current/10 space-y-1.5">
+            <div className="text-[10px] tracking-[0.22em] uppercase font-bold text-primary">
+              Logged to Data Center
             </div>
-            <ul className="text-xs space-y-1 mb-3">
-              {proposed.exercises.map((ex: any, i: number) => (
-                <li key={i} className="flex justify-between gap-2">
-                  <span>{i + 1}. {ex.name}</span>
-                  <span className="opacity-70 whitespace-nowrap font-mono">
-                    {ex.sets}×{ex.repsMin ?? "?"}-{ex.repsMax ?? "?"}
+            {logged.map((item, i) => {
+              const key = `${message.id}-${i}`;
+              const isUndone = undone[key];
+              return (
+                <div key={key} className="flex items-center justify-between gap-2 text-xs">
+                  <span className={cn("font-mono", isUndone && "line-through opacity-50")}>
+                    {item.summary}
                   </span>
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || saveMutation.isSuccess}
-                className="text-xs px-3 py-2 rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 uppercase tracking-wider font-bold"
-                data-testid="button-save-atlas-workout"
-              >
-                {saveMutation.isSuccess ? "Saved ✓" : saveMutation.isPending ? "Saving…" : "Save as today's plan"}
-              </button>
-              <a
-                href="/#/generate"
-                className="text-xs px-3 py-2 rounded border border-current/20 hover:bg-current/5 uppercase tracking-wider inline-flex items-center"
-              >
-                Open workout page
-              </a>
-            </div>
+                  {!isUndone && item.undoUrl && (
+                    <button
+                      onClick={() => doUndo(item, key)}
+                      className="px-2 py-1 rounded border border-current/20 hover:bg-current/5 uppercase tracking-wider text-[10px]"
+                      data-testid={`button-undo-${i}`}
+                    >
+                      Undo
+                    </button>
+                  )}
+                  {isUndone && <span className="text-[10px] uppercase opacity-60">Undone</span>}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

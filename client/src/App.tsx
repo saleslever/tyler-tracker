@@ -17,7 +17,6 @@ const MoodPage = lazy(() => import("@/pages/Mood"));
 const Fasting = lazy(() => import("@/pages/Fasting"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
 const Atlas = lazy(() => import("@/pages/Atlas"));
-const GenerateWorkout = lazy(() => import("@/pages/GenerateWorkout"));
 const Uploads = lazy(() => import("@/pages/Uploads"));
 const DataCenter = lazy(() => import("@/pages/DataCenter"));
 
@@ -38,7 +37,6 @@ function AppRouter() {
           <Route path="/" component={Analytics} />
           <Route path="/coach" component={Analytics} />
           <Route path="/atlas" component={Atlas} />
-          <Route path="/generate" component={GenerateWorkout} />
           <Route path="/uploads" component={Uploads} />
           <Route path="/habits" component={Habits} />
           <Route path="/tasks" component={Tasks} />
