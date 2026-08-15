@@ -160,6 +160,26 @@
   }
   .mobile-safe-top { padding-top: calc(3.5rem + env(safe-area-inset-top, 0px)); }
   .mobile-safe-bottom { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)); }
+
+  /* Atlas chat shell — fill the viewport between the fixed mobile top bar and bottom nav.
+     On desktop, both bars disappear (md:hidden) so we just fill the viewport height. */
+  .atlas-shell {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(3.5rem + env(safe-area-inset-top, 0px));
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+  }
+  @media (min-width: 768px) {
+    .atlas-shell {
+      position: relative;
+      top: 0;
+      bottom: 0;
+      height: 100dvh;
+      z-index: auto;
+    }
+  }
   ::selection {
     background: hsl(var(--primary) / 0.28);
     color: hsl(var(--primary-foreground));

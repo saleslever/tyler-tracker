@@ -125,8 +125,7 @@ export default function Atlas() {
 
   return (
     <div
-      className="parchment flex flex-col overflow-hidden"
-      style={{ height: "100dvh" }}
+      className="parchment flex flex-col overflow-hidden atlas-shell"
     >
       {/* ─── TOP BAR (only when messages exist) ─── */}
       {hasMessages && (
@@ -304,10 +303,79 @@ export default function Atlas() {
           </div>
         </div>
       </div>
-      {/* Reserve room for bottom nav on mobile */}
-      <div className="h-14 md:hidden flex-shrink-0" />
     </div>
   );
+}
+
+// ─── Tiny inline markdown for Atlas replies (bold, italic, bullets, paragraphs) ───
+function renderInline(text: string): (string | JSX.Element)[] {
+  const out: (string | JSX.Element)[] = [];
+  const re = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+  let last = 0, m: RegExpExecArray | null, i = 0;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[2]) out.push(<strong key={i++} className="font-bold">{m[2]}</strong>);
+    else if (m[3]) out.push(<em key={i++}>{m[3]}</em>);
+    else if (m[4]) out.push(<code key={i++} className="font-mono text-[13px] bg-muted/50 rounded px-1">{m[4]}</code>);
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function MarkdownLite({ content }: { content: string }) {
+  const lines = content.split(/\n/);
+  const blocks: JSX.Element[] = [];
+  let buffer: string[] = [];
+  let bulletBuffer: string[] = [];
+  let key = 0;
+
+  const flushParagraph = () => {
+    if (buffer.length === 0) return;
+    blocks.push(
+      <p key={key++} className="whitespace-pre-wrap">
+        {buffer.map((l, i) => (
+          <span key={i}>
+            {renderInline(l)}
+            {i < buffer.length - 1 && <br />}
+          </span>
+        ))}
+      </p>
+    );
+    buffer = [];
+  };
+  const flushBullets = () => {
+    if (bulletBuffer.length === 0) return;
+    blocks.push(
+      <ul key={key++} className="list-disc pl-5 space-y-0.5 my-1">
+        {bulletBuffer.map((b, i) => (
+          <li key={i}>{renderInline(b)}</li>
+        ))}
+      </ul>
+    );
+    bulletBuffer = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.replace(/\r$/, "");
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    if (bullet) {
+      flushParagraph();
+      bulletBuffer.push(bullet[1]);
+      continue;
+    }
+    if (line.trim() === "") {
+      flushParagraph();
+      flushBullets();
+      continue;
+    }
+    flushBullets();
+    buffer.push(line);
+  }
+  flushParagraph();
+  flushBullets();
+
+  return <div className="space-y-2">{blocks}</div>;
 }
 
 // ─── Message bubble w/ decision-card save ───
@@ -348,7 +416,9 @@ function MessageBubble({ message }: { message: Conversation }) {
           ? "bg-primary text-primary-foreground rounded-br-sm"
           : "bg-card border border-card-border text-foreground rounded-bl-sm"
       )}>
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser
+          ? <div className="whitespace-pre-wrap">{message.content}</div>
+          : <MarkdownLite content={message.content} />}
         {proposed && Array.isArray(proposed.exercises) && proposed.exercises.length > 0 && (
           <div className="mt-3 pt-3 border-t border-current/10">
             <div className="text-[10px] tracking-[0.22em] uppercase font-bold mb-2 text-primary">

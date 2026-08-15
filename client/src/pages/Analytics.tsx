@@ -302,122 +302,57 @@ function WeightChart({ series, targetWeight }: { series: { date: string; weight:
 
 // ─── Body silhouette with per-part set counts ───
 function BodySilhouette({ sets, targets }: { sets: Record<string, number>; targets: Record<string, number> }) {
-  function tone(part: string): string {
-    const s = sets[part] ?? 0;
-    const t = targets[part] ?? 18;
-    if (s === 0) return "hsl(var(--muted-foreground) / 0.25)";
-    if (s >= t) return "hsl(140 45% 45%)"; // green
-    if (s >= t * 0.5) return "hsl(var(--primary) / 0.6)";
-    return "hsl(var(--primary) / 0.3)";
-  }
   const legend = (part: string) => {
     const s = sets[part] ?? 0;
     const t = targets[part] ?? 18;
     return `${s}/${t}`;
   };
 
-  const body = "hsl(var(--muted-foreground) / 0.10)";
-  const stroke = "hsl(var(--foreground) / 0.35)";
+  function statusColor(part: string): { dot: string; text: string; bg: string; label: string } {
+    const s = sets[part] ?? 0;
+    const t = targets[part] ?? 18;
+    if (s === 0) return { dot: "hsl(var(--muted-foreground) / 0.4)", text: "text-muted-foreground", bg: "bg-muted/50", label: "NONE" };
+    if (s >= t) return { dot: "hsl(140 55% 42%)", text: "text-green-700 dark:text-green-500", bg: "bg-green-500/10", label: "HIT" };
+    if (s >= t * 0.66) return { dot: "hsl(38 80% 45%)", text: "text-[#8B6F3E]", bg: "bg-[#8B6F3E]/10", label: "NEAR" };
+    return { dot: "hsl(var(--primary))", text: "text-primary", bg: "bg-primary/10", label: "UNDER" };
+  }
+
+  const groups: Array<[string, string]> = [
+    ["shoulders", "Shoulders"],
+    ["chest", "Chest"],
+    ["back", "Back"],
+    ["biceps", "Biceps"],
+    ["triceps", "Triceps"],
+    ["legs", "Legs"],
+    ["abs", "Abs"],
+  ];
 
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
-      {/* Anatomical silhouette — front + back */}
-      <div className="flex justify-center gap-2">
-        {/* FRONT VIEW */}
-        <svg viewBox="0 0 100 220" className="h-56" aria-label="Front view">
-          {/* Head + neck */}
-          <ellipse cx="50" cy="14" rx="8.5" ry="10" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M46 24 L54 24 L55 30 L45 30 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Traps/Shoulders — deltoid caps */}
-          <path d="M28 32 Q34 28 45 30 L45 42 Q37 48 28 45 Q24 40 28 32 Z" fill={tone("shoulders")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M72 32 Q66 28 55 30 L55 42 Q63 48 72 45 Q76 40 72 32 Z" fill={tone("shoulders")} stroke={stroke} strokeWidth="0.5" />
-          {/* Chest — pectorals */}
-          <path d="M32 34 Q41 32 49 34 L49 56 Q40 60 33 56 Q30 45 32 34 Z" fill={tone("chest")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M68 34 Q59 32 51 34 L51 56 Q60 60 67 56 Q70 45 68 34 Z" fill={tone("chest")} stroke={stroke} strokeWidth="0.5" />
-          {/* Biceps (upper arms front) */}
-          <path d="M24 44 Q19 50 20 62 Q22 72 27 74 Q31 68 30 60 Q30 50 27 44 Z" fill={tone("biceps")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M76 44 Q81 50 80 62 Q78 72 73 74 Q69 68 70 60 Q70 50 73 44 Z" fill={tone("biceps")} stroke={stroke} strokeWidth="0.5" />
-          {/* Forearms */}
-          <path d="M22 74 Q19 84 21 96 L26 96 Q28 84 27 74 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M78 74 Q81 84 79 96 L74 96 Q72 84 73 74 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Abs — 6-pack grid */}
-          <path d="M38 58 L62 58 L60 100 Q50 104 40 100 Z" fill={tone("abs")} stroke={stroke} strokeWidth="0.5" />
-          <line x1="50" y1="60" x2="50" y2="98" stroke={stroke} strokeWidth="0.4" />
-          <line x1="39" y1="72" x2="61" y2="72" stroke={stroke} strokeWidth="0.4" />
-          <line x1="39" y1="84" x2="61" y2="84" stroke={stroke} strokeWidth="0.4" />
-          {/* Hips */}
-          <path d="M38 100 L62 100 L64 112 Q50 116 36 112 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Quads (front legs) */}
-          <path d="M38 112 Q34 130 36 158 Q40 162 45 158 Q46 130 46 114 Z" fill={tone("legs")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M62 112 Q66 130 64 158 Q60 162 55 158 Q54 130 54 114 Z" fill={tone("legs")} stroke={stroke} strokeWidth="0.5" />
-          {/* Calves lower */}
-          <path d="M38 158 Q36 180 40 200 L45 200 Q46 180 45 158 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M62 158 Q64 180 60 200 L55 200 Q54 180 55 158 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Feet */}
-          <ellipse cx="41" cy="205" rx="5" ry="3" fill={body} stroke={stroke} strokeWidth="0.4" />
-          <ellipse cx="59" cy="205" rx="5" ry="3" fill={body} stroke={stroke} strokeWidth="0.4" />
-          <text x="50" y="218" textAnchor="middle" fontSize="6" fill="hsl(var(--muted-foreground))" letterSpacing="1">FRONT</text>
-        </svg>
-        {/* BACK VIEW */}
-        <svg viewBox="0 0 100 220" className="h-56" aria-label="Back view">
-          {/* Head */}
-          <ellipse cx="50" cy="14" rx="8.5" ry="10" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M46 24 L54 24 L55 30 L45 30 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Traps (rear delts region) */}
-          <path d="M28 32 Q34 28 45 30 L45 42 Q37 48 28 45 Q24 40 28 32 Z" fill={tone("shoulders")} stroke={stroke} strokeWidth="0.5" opacity="0.85" />
-          <path d="M72 32 Q66 28 55 30 L55 42 Q63 48 72 45 Q76 40 72 32 Z" fill={tone("shoulders")} stroke={stroke} strokeWidth="0.5" opacity="0.85" />
-          {/* Upper traps */}
-          <path d="M42 30 L58 30 L54 42 L46 42 Z" fill={tone("back")} stroke={stroke} strokeWidth="0.5" />
-          {/* Lats — the wing shape */}
-          <path d="M32 42 Q29 58 34 74 Q42 80 49 78 L49 44 Q40 42 32 42 Z" fill={tone("back")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M68 42 Q71 58 66 74 Q58 80 51 78 L51 44 Q60 42 68 42 Z" fill={tone("back")} stroke={stroke} strokeWidth="0.5" />
-          {/* Triceps (back of arms) */}
-          <path d="M24 44 Q19 50 20 62 Q22 72 27 74 Q31 68 30 60 Q30 50 27 44 Z" fill={tone("triceps")} stroke={stroke} strokeWidth="0.5" />
-          <path d="M76 44 Q81 50 80 62 Q78 72 73 74 Q69 68 70 60 Q70 50 73 44 Z" fill={tone("triceps")} stroke={stroke} strokeWidth="0.5" />
-          {/* Forearms */}
-          <path d="M22 74 Q19 84 21 96 L26 96 Q28 84 27 74 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M78 74 Q81 84 79 96 L74 96 Q72 84 73 74 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Lower back */}
-          <path d="M38 78 L62 78 L60 100 Q50 102 40 100 Z" fill={tone("back")} stroke={stroke} strokeWidth="0.5" opacity="0.7" />
-          {/* Glutes */}
-          <path d="M38 100 Q34 108 40 116 Q46 118 49 114 L49 102 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M62 100 Q66 108 60 116 Q54 118 51 114 L51 102 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Hamstrings */}
-          <path d="M38 116 Q34 132 36 158 Q40 162 45 158 Q46 132 46 118 Z" fill={tone("legs")} stroke={stroke} strokeWidth="0.5" opacity="0.85" />
-          <path d="M62 116 Q66 132 64 158 Q60 162 55 158 Q54 132 54 118 Z" fill={tone("legs")} stroke={stroke} strokeWidth="0.5" opacity="0.85" />
-          {/* Calves */}
-          <path d="M38 158 Q36 180 40 200 L45 200 Q46 180 45 158 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          <path d="M62 158 Q64 180 60 200 L55 200 Q54 180 55 158 Z" fill={body} stroke={stroke} strokeWidth="0.5" />
-          {/* Feet */}
-          <ellipse cx="41" cy="205" rx="5" ry="3" fill={body} stroke={stroke} strokeWidth="0.4" />
-          <ellipse cx="59" cy="205" rx="5" ry="3" fill={body} stroke={stroke} strokeWidth="0.4" />
-          <text x="50" y="218" textAnchor="middle" fontSize="6" fill="hsl(var(--muted-foreground))" letterSpacing="1">BACK</text>
-        </svg>
+    <div className="space-y-4">
+      {/* Anatomical figures — front + back photographic renders */}
+      <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
+        <div className="flex flex-col items-center">
+          <img src="/body-front.png" alt="Front anatomy" className="h-72 object-contain" />
+          <div className="microlabel mt-1">Front</div>
+        </div>
+        <div className="flex flex-col items-center">
+          <img src="/body-back.png" alt="Back anatomy" className="h-72 object-contain" />
+          <div className="microlabel mt-1">Back</div>
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="space-y-1.5 text-xs">
-        {[
-          ["shoulders", "Shoulders"],
-          ["chest", "Chest"],
-          ["back", "Back"],
-          ["biceps", "Biceps"],
-          ["triceps", "Triceps"],
-          ["legs", "Legs"],
-          ["abs", "Abs"],
-        ].map(([k, label]) => {
-          const s = sets[k] ?? 0;
-          const t = targets[k] ?? 18;
-          const hit = s >= t;
+      {/* Muscle status grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {groups.map(([k, label]) => {
+          const c = statusColor(k);
           return (
-            <div key={k} className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: tone(k) }} />
-                <span className="text-muted-foreground">{label}</span>
+            <div key={k} className={cn("rounded-lg border border-border/60 p-2.5", c.bg)}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</span>
+                <span className="w-2 h-2 rounded-full" style={{ background: c.dot }} />
               </div>
-              <span className={cn("font-mono font-semibold", hit ? "text-green-700" : s === 0 ? "text-muted-foreground" : "text-primary")}>
-                {legend(k)}
-              </span>
+              <div className={cn("font-mono text-lg font-bold", c.text)}>{legend(k)}</div>
+              <div className={cn("text-[9px] uppercase tracking-wider font-bold", c.text)}>{c.label}</div>
             </div>
           );
         })}
@@ -425,3 +360,4 @@ function BodySilhouette({ sets, targets }: { sets: Record<string, number>; targe
     </div>
   );
 }
+

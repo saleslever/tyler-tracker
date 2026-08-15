@@ -65,10 +65,9 @@ interface CoachContext {
 }
 
 function useTheme() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
+  // Tyler locked Palette 2 Light — default to light regardless of OS.
+  // Theme toggle still lets him flip to dark manually within the session.
+  const [isDark, setIsDark] = useState(false);
   useEffect(() => {
     const root = document.documentElement;
     if (isDark) root.classList.add("dark");
@@ -199,7 +198,12 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 min-w-0 mobile-safe-top mobile-safe-bottom md:!pt-0 md:!pb-0">{children}</main>
+      <main className={cn(
+        "flex-1 min-w-0",
+        location.startsWith("/atlas")
+          ? "" // Atlas manages its own safe-areas and fills viewport
+          : "mobile-safe-top mobile-safe-bottom md:!pt-0 md:!pb-0"
+      )}>{children}</main>
 
       {/* Mobile bottom tab bar — coach-focused */}
       <nav
