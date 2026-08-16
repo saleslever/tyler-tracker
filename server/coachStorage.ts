@@ -344,7 +344,7 @@ export async function buildCoachContext(): Promise<CoachContext> {
     computeWeeklyLedger(t),
     listCoachMemory(true),
     getChecklist(t),
-    recentConversation(10),
+    recentConversation(40),
   ]);
   return { today: t, settings, goal, target, latestScan, latestRecovery, todayMacros, todayPlan, weeklyLedger, memory, todayChecklist, recentTurns };
 }
