@@ -15,8 +15,13 @@ import type { CoachContext } from "./coachStorage";
 import {
   logConversation, addCoachMemory,
   createBodyScan, upsertMacroLog, upsertRecoveryLog, logWorkoutSets,
+  deleteBodyScan, deleteMacroLog, deleteRecoveryLog,
+  adminPurgeWorkoutsOnDate, adminRepatchMacroDate,
+  listMacroLogsRange,
 } from "./coachStorage";
-import { DIRECT_BODY_PARTS } from "@shared/schema";
+import { db } from "./storage";
+import { bodyScans, macroLogs, recoveryLogs, workoutLogs, DIRECT_BODY_PARTS } from "@shared/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 
 const COACH_MODEL = "claude-sonnet-4-5-20250929";  // Anthropic API model id for Claude Sonnet 4.6
 const COACH_MAX_TOKENS = 2048;
@@ -296,7 +301,22 @@ Schema for the JSON:
     {"type": "body_scan", "date": "YYYY-MM-DD", "weight": <lb>, "bodyFatPct": <n|null>, "muscleMass": <n|null>, "source": "Wyze|Renpho|InBody|manual", "notes": "..."},
     {"type": "macro", "date": "YYYY-MM-DD", "calories": <n>, "proteinG": <n>, "fatG": <n>, "carbsG": <n>, "netCarbsG": <n|null>, "source": "MacroFactor|Cronometer|manual", "notes": "..."},
     {"type": "recovery", "date": "YYYY-MM-DD", "sleepHours": <n|null>, "whoopRecoveryPct": <n|null>, "hrvMs": <n|null>, "restingHr": <n|null>, "strain": <n|null>, "notes": "..."},
-    {"type": "workout_completed", "date": "YYYY-MM-DD", "sets": [{"exerciseName": "...", "setNumber": 1, "reps": <n>, "weight": <n|null>, "weightUnit": "lb|kg|bw", "targetBodyPart": "one of: ${validBodyParts}", "rpe": <n|null>, "notes": "..."}]}
+    {"type": "workout_completed", "date": "YYYY-MM-DD", "sets": [{"exerciseName": "...", "setNumber": 1, "reps": <n>, "weight": <n|null>, "weightUnit": "lb|kg|bw", "targetBodyPart": "one of: ${validBodyParts}", "rpe": <n|null>, "notes": "..."}]},
+
+    // ── EDIT / DELETE POWERS ─────────────────────────────────────────────────
+    // You have full CRUD authority. When Tyler asks you to fix, change, remove,
+    // undo, or move data, EMIT these actions in the same decisions block.
+    // Prefer id-targeted operations; use date-targeted purges only when he says
+    // "clear everything for that day". Always tell him what you did in prose.
+    {"type": "delete_body_scan", "id": <row id>},
+    {"type": "delete_macro", "id": <row id>},
+    {"type": "delete_macro_on_date", "date": "YYYY-MM-DD"},
+    {"type": "delete_recovery", "id": <row id>},
+    {"type": "purge_workouts_on_date", "date": "YYYY-MM-DD"},
+    {"type": "repatch_macro_date", "id": <row id>, "newDate": "YYYY-MM-DD"},
+    {"type": "update_body_scan", "id": <row id>, "weight": <n?>, "bodyFatPct": <n?>, "date": "YYYY-MM-DD?", "notes": "...?"},
+    {"type": "update_macro", "id": <row id>, "calories": <n?>, "proteinG": <n?>, "fatG": <n?>, "carbsG": <n?>, "date": "YYYY-MM-DD?"},
+    {"type": "update_recovery", "id": <row id>, "sleepHours": <n?>, "whoopRecoveryPct": <n?>, "hrvMs": <n?>, "restingHr": <n?>, "strain": <n?>}
   ],
   "workoutPlanToSet": {
     "date": "YYYY-MM-DD",
@@ -544,6 +564,60 @@ export async function askCoach(
             id: (row as any).id,
             undoUrl: "/api/coach/undo/recovery",
           });
+        } else if (entry.type === "delete_body_scan" && typeof entry.id === "number") {
+          await deleteBodyScan(entry.id);
+          logged.push({ type: "delete_body_scan", summary: `deleted body_scan id=${entry.id}` });
+        } else if (entry.type === "delete_macro" && typeof entry.id === "number") {
+          await deleteMacroLog(entry.id);
+          logged.push({ type: "delete_macro", summary: `deleted macro id=${entry.id}` });
+        } else if (entry.type === "delete_macro_on_date" && entry.date) {
+          const rows = await listMacroLogsRange(entry.date, entry.date);
+          for (const r of rows) await deleteMacroLog(r.id);
+          logged.push({ type: "delete_macro_on_date", summary: `deleted ${rows.length} macro row(s) on ${entry.date}` });
+        } else if (entry.type === "delete_recovery" && typeof entry.id === "number") {
+          await deleteRecoveryLog(entry.id);
+          logged.push({ type: "delete_recovery", summary: `deleted recovery id=${entry.id}` });
+        } else if (entry.type === "purge_workouts_on_date" && entry.date) {
+          const n = await adminPurgeWorkoutsOnDate(entry.date);
+          logged.push({ type: "purge_workouts_on_date", summary: `purged ${n} workout set(s) on ${entry.date}` });
+        } else if (entry.type === "repatch_macro_date" && typeof entry.id === "number" && entry.newDate) {
+          const row = await adminRepatchMacroDate(entry.id, entry.newDate);
+          logged.push({ type: "repatch_macro_date", summary: `moved macro id=${entry.id} to ${entry.newDate}`, id: row?.id });
+        } else if (entry.type === "update_body_scan" && typeof entry.id === "number") {
+          const patch: any = {};
+          if (entry.weight != null) patch.weight = entry.weight;
+          if (entry.bodyFatPct != null) patch.bodyFatPct = entry.bodyFatPct;
+          if (entry.muscleMass != null) patch.muscleMass = entry.muscleMass;
+          if (entry.notes != null) patch.notes = entry.notes;
+          if (entry.date != null) patch.date = entry.date;
+          if (Object.keys(patch).length === 0) {
+            logged.push({ type: "update_body_scan", summary: `no-op (no fields)` });
+          } else {
+            const [row] = await db.update(bodyScans).set(patch).where(eq(bodyScans.id, entry.id)).returning();
+            logged.push({ type: "update_body_scan", summary: `updated body_scan id=${entry.id} (${Object.keys(patch).join(",")})`, id: row?.id });
+          }
+        } else if (entry.type === "update_macro" && typeof entry.id === "number") {
+          const patch: any = {};
+          for (const k of ["date","calories","proteinG","fatG","carbsG","netCarbsG","notes","source"]) {
+            if (entry[k] !== undefined) patch[k] = entry[k];
+          }
+          if (Object.keys(patch).length === 0) {
+            logged.push({ type: "update_macro", summary: `no-op (no fields)` });
+          } else {
+            const [row] = await db.update(macroLogs).set(patch).where(eq(macroLogs.id, entry.id)).returning();
+            logged.push({ type: "update_macro", summary: `updated macro id=${entry.id} (${Object.keys(patch).join(",")})`, id: row?.id });
+          }
+        } else if (entry.type === "update_recovery" && typeof entry.id === "number") {
+          const patch: any = {};
+          for (const k of ["date","sleepHours","whoopRecoveryPct","hrvMs","restingHr","strain","notes"]) {
+            if (entry[k] !== undefined) patch[k] = entry[k];
+          }
+          if (Object.keys(patch).length === 0) {
+            logged.push({ type: "update_recovery", summary: `no-op (no fields)` });
+          } else {
+            const [row] = await db.update(recoveryLogs).set(patch).where(eq(recoveryLogs.id, entry.id)).returning();
+            logged.push({ type: "update_recovery", summary: `updated recovery id=${entry.id} (${Object.keys(patch).join(",")})`, id: row?.id });
+          }
         } else if (entry.type === "workout_completed" && entry.date && Array.isArray(entry.sets)) {
           const rows = await logWorkoutSets(entry.sets.map((s: any) => ({
             date: entry.date,
