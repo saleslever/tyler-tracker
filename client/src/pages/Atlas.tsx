@@ -105,10 +105,13 @@ export default function Atlas() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, isThinking]);
 
-  // On first load with existing messages, jump straight to bottom (no smooth)
+  // On first load with existing messages, jump straight to bottom of the PAGE
+  // (the whole document scrolls now, not an inner overflow container).
   useEffect(() => {
-    if (serverMessages.length > 0 && scrollerRef.current) {
-      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
+    if (serverMessages.length > 0) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "auto" });
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationQuery.isSuccess]);
@@ -170,21 +173,21 @@ export default function Atlas() {
 
   return (
     <div
-      className="parchment flex flex-col overflow-hidden atlas-shell"
+      className="parchment flex flex-col atlas-shell"
     >
-      {/* ─── MESSAGES SCROLLER (with sticky top bar inside) ─── */}
+      {/* ─── MESSAGES (page-level scroll now, sticky top bar inside) ─── */}
       <div
         ref={scrollerRef}
         className={cn(
-          "flex-1 overflow-y-auto overscroll-contain relative min-h-0",
+          "flex-1 relative",
           !hasMessages && "flex flex-col justify-center"
         )}
-        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" } as any}
       >
-        {/* Sticky Atlas header — stays visible while scrolling */}
+        {/* Sticky Atlas header — stays visible while scrolling (sits below fixed mobile top bar) */}
         {hasMessages && (
           <div
-            className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/90 backdrop-blur"
+            className="sticky z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/90 backdrop-blur"
+            style={{ top: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
           >
             <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
               <video autoPlay loop muted playsInline className="w-full h-full object-cover">
@@ -285,10 +288,13 @@ export default function Atlas() {
         </div>
       </div>
 
-      {/* ─── INPUT (pinned) ─── */}
+      {/* ─── INPUT (pinned to viewport bottom via sticky positioning) ─── */}
       <div
-        className="flex-shrink-0 border-t border-border/40 bg-background/95 backdrop-blur"
-        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }}
+        className="sticky z-30 flex-shrink-0 border-t border-border/40 bg-background/95 backdrop-blur"
+        style={{
+          bottom: "calc(3.5rem + env(safe-area-inset-bottom, 0px))",
+          paddingBottom: "0.5rem",
+        }}
       >
         <div className="max-w-2xl mx-auto px-3 pt-2 pb-2">
           {images.length > 0 && (

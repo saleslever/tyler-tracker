@@ -16,7 +16,9 @@
 import { useEffect, useRef } from "react";
 
 // CC-BY 4.0. Attribution: "Goliath" by Scott Buckley — https://www.scottbuckley.com.au
-const TRACK_URL = "https://www.scottbuckley.com.au/library/wp-content/uploads/2021/08/sb_goliath.mp3";
+// Served from our own origin (client/public/atlas-score.mp3) to avoid iOS Safari's
+// cross-origin autoplay restrictions.
+const TRACK_URL = "/atlas-score.mp3";
 const TARGET_VOLUME = 0.55;
 const FADE_IN_MS = 900;
 const FADE_OUT_MS = 700;
@@ -37,7 +39,6 @@ export function useAtlasThinkingSound(active: boolean) {
     const a = new Audio(TRACK_URL);
     a.loop = true;
     a.preload = "auto";
-    a.crossOrigin = "anonymous"; // best-effort, some browsers ignore for <audio>
     a.volume = 0;
     audioRef.current = a;
     return a;
