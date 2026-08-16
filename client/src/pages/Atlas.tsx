@@ -94,9 +94,11 @@ export default function Atlas() {
       queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
     },
     onError: () => {
-      // On error, restore the text so the user doesn't lose it
-      if (pendingUserMsg) setInput(pendingUserMsg.content);
-      setPendingUserMsg(null);
+      // Do NOT put the text back into the composer — that surprised Tyler when
+      // he backgrounded the app after sending. Keep the optimistic bubble visible
+      // so he can see what he sent; the next refresh of /api/coach/conversation
+      // will show whether the server actually received it.
+      // If we want a resend affordance later, wire it here.
     },
   });
 
@@ -407,6 +409,12 @@ function MarkdownLite({ content }: { content: string }) {
     .replace(/^\s*#{1,6}\s+/gm, "")
     // Kill horizontal rule dividers
     .replace(/^\s*---+\s*$/gm, "")
+    // Kill bold/italic markdown wrappers around text — keep the words.
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    // Strip leading bullet dashes — keep the line, drop the bullet char.
+    .replace(/^\s*[-*+]\s+/gm, "")
+    // Strip numbered list prefixes ("1. ", "2. ") — keep the line.
+    .replace(/^\s*\d+\.\s+/gm, "")
     // Collapse runs of blank lines
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -444,12 +452,7 @@ function MarkdownLite({ content }: { content: string }) {
 
   for (const raw of lines) {
     const line = raw.replace(/\r$/, "");
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    if (bullet) {
-      flushParagraph();
-      bulletBuffer.push(bullet[1]);
-      continue;
-    }
+    // Bullets were already stripped by the cleaner above; treat every line as prose.
     if (line.trim() === "") {
       flushParagraph();
       flushBullets();
