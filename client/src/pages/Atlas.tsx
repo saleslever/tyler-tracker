@@ -10,8 +10,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Loader2, Send, Paperclip, X } from "lucide-react";
+import { Loader2, Send, Paperclip, X, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAtlasThinkingSound } from "@/hooks/useAtlasThinkingSound";
 
 interface Conversation {
   id: number;
@@ -31,6 +32,15 @@ const QUICK_STARTS = [
 
 export default function Atlas() {
   const [input, setInput] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  // Add body class while composer focused so tab bar can hide (iOS keyboard fix)
+  useEffect(() => {
+    if (isFocused) document.documentElement.classList.add("atlas-composing");
+    else document.documentElement.classList.remove("atlas-composing");
+    return () => document.documentElement.classList.remove("atlas-composing");
+  }, [isFocused]);
   const [images, setImages] = useState<{ dataUrl: string; name: string }[]>([]);
   const [pendingUserMsg, setPendingUserMsg] = useState<{ content: string; images: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +56,9 @@ export default function Atlas() {
     mutationFn: async (payload: { message: string; imageDataUrls?: string[] }) => {
       const body: any = { message: payload.message };
       if (payload.imageDataUrls && payload.imageDataUrls.length > 0) body.imageDataUrls = payload.imageDataUrls;
-      const res = await apiRequest("POST", "/api/coach/chat", body);
+      // keepalive keeps the POST alive even if the tab is backgrounded or unloaded.
+      // Only effective for bodies <60KB (text-only). Image sends fall back to normal fetch.
+      const res = await apiRequest("POST", "/api/coach/chat", body, { keepalive: true });
       return res.json();
     },
     onSuccess: () => {
@@ -75,6 +87,9 @@ export default function Atlas() {
       }]
     : serverMessages;
   const isThinking = sendMutation.isPending;
+
+  // Spartan war-drum motif while Atlas is composing his response
+  useAtlasThinkingSound(isThinking && !muted);
   const hasMessages = messages.length > 0;
 
   // Auto-scroll to bottom whenever messages or thinking state changes
@@ -176,6 +191,15 @@ export default function Atlas() {
                 <span className="text-[9px] tracking-[0.24em] uppercase text-primary font-semibold">Online · Ready</span>
               </div>
             </div>
+            <button
+              onClick={() => setMuted((m) => !m)}
+              className="p-2 rounded-full hover:bg-primary/5 text-muted-foreground shrink-0"
+              aria-label={muted ? "Unmute war drums" : "Mute war drums"}
+              data-testid="button-mute-atlas"
+              title={muted ? "War drums off" : "War drums on"}
+            >
+              {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
           </div>
         )}
 
@@ -308,6 +332,8 @@ export default function Atlas() {
                   submit();
                 }
               }}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               placeholder="Talk to Atlas…"
               rows={1}
               className="flex-1 resize-none bg-transparent focus:outline-none py-2 text-[15px] leading-snug min-h-[36px] max-h-32"

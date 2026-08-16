@@ -13,11 +13,16 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  opts?: { keepalive?: boolean },
 ): Promise<Response> {
+  const body = data ? JSON.stringify(data) : undefined;
+  // keepalive requires body <64KB. Only enable if requested AND body fits.
+  const useKeepalive = !!opts?.keepalive && (!body || body.length < 60_000);
   const res = await fetch(`${API_BASE}${url}`, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
+    body,
+    keepalive: useKeepalive,
   });
 
   await throwIfResNotOk(res);

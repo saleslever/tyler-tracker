@@ -204,9 +204,12 @@ export function Layout({ children }: { children: ReactNode }) {
           : "mobile-safe-top mobile-safe-bottom md:!pt-0 md:!pb-0"
       )}>{children}</main>
 
-      {/* Mobile bottom tab bar — coach-focused */}
+      {/* Mobile bottom tab bar — coach-focused. On Atlas, hide when keyboard is open (input focused). */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t border-border"
+        className={cn(
+          "md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t border-border",
+          location.startsWith("/atlas") && "atlas-tabs-conditional"
+        )}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="grid grid-cols-5 h-14">
