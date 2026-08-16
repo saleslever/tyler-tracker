@@ -221,9 +221,9 @@ export default function Atlas() {
             <button
               onClick={() => setMuted((m) => !m)}
               className="p-2 rounded-full hover:bg-primary/5 text-muted-foreground shrink-0"
-              aria-label={muted ? "Unmute war drums" : "Mute war drums"}
+              aria-label={muted ? "Unmute cinematic score" : "Mute cinematic score"}
               data-testid="button-mute-atlas"
-              title={muted ? "War drums off" : "War drums on"}
+              title={muted ? "Score off — 'Goliath' by Scott Buckley (CC-BY 4.0)" : "Score on — 'Goliath' by Scott Buckley (CC-BY 4.0)"}
             >
               {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>

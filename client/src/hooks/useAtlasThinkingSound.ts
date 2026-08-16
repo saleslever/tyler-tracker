@@ -1,150 +1,88 @@
 /**
- * useAtlasThinkingSound — Spartan war-drum motif that plays while Atlas is thinking.
+ * useAtlasThinkingSound — cinematic score that plays while Atlas is thinking.
  *
- * Uses Web Audio API to synthesize a low, rhythmic drum loop with subtle horn drone.
- * No external assets. Auto-stops when `active` flips false.
- * Safe against browser autoplay policies: only starts inside a user gesture path
- * (submit button click), which is already how sendMutation begins.
+ * Uses a real orchestral cinematic MP3 (Scott Buckley "Goliath", CC-BY 4.0),
+ * hosted on Scott's WordPress CDN. On first activation we lazy-load the audio
+ * element; on subsequent activations we resume from the start with a fade-in.
+ * When `active` flips false, we fade out and pause. When `active` is true but
+ * the track finishes, it loops.
+ *
+ * Attribution requirement (CC-BY 4.0): the Atlas page shows a small credit line
+ * next to the mute button. Do not remove that credit.
+ *
+ * Autoplay: only starts inside a user gesture chain (the send button click),
+ * which is already how this hook is invoked.
  */
 import { useEffect, useRef } from "react";
 
-const BPM = 84; // slow, ceremonial
-const BEAT_MS = 60_000 / BPM;
+// CC-BY 4.0. Attribution: "Goliath" by Scott Buckley — https://www.scottbuckley.com.au
+const TRACK_URL = "https://www.scottbuckley.com.au/library/wp-content/uploads/2021/08/sb_goliath.mp3";
+const TARGET_VOLUME = 0.55;
+const FADE_IN_MS = 900;
+const FADE_OUT_MS = 700;
 
 export function useAtlasThinkingSound(active: boolean) {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const masterRef = useRef<GainNode | null>(null);
-  const droneRef = useRef<{ osc: OscillatorNode; gain: GainNode; osc2: OscillatorNode } | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const stepRef = useRef(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!active) {
-      stop();
-      return;
-    }
-    start();
+    if (active) start();
+    else stop();
     return () => stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  function ensureCtx(): AudioContext {
-    if (!ctxRef.current) {
-      const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
-      ctxRef.current = new Ctor();
+  function ensureAudio(): HTMLAudioElement {
+    if (audioRef.current) return audioRef.current;
+    const a = new Audio(TRACK_URL);
+    a.loop = true;
+    a.preload = "auto";
+    a.crossOrigin = "anonymous"; // best-effort, some browsers ignore for <audio>
+    a.volume = 0;
+    audioRef.current = a;
+    return a;
+  }
+
+  function clearFade() {
+    if (fadeTimerRef.current != null) {
+      window.clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
     }
-    if (ctxRef.current!.state === "suspended") ctxRef.current!.resume().catch(() => {});
-    return ctxRef.current!;
+  }
+
+  function fadeTo(target: number, durationMs: number, onDone?: () => void) {
+    const a = audioRef.current;
+    if (!a) return;
+    clearFade();
+    const start = a.volume;
+    const startTs = performance.now();
+    fadeTimerRef.current = window.setInterval(() => {
+      const t = Math.min(1, (performance.now() - startTs) / durationMs);
+      a.volume = start + (target - start) * t;
+      if (t >= 1) {
+        clearFade();
+        onDone?.();
+      }
+    }, 30);
   }
 
   function start() {
-    const ctx = ensureCtx();
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    master.connect(ctx.destination);
-    masterRef.current = master;
-
-    // Fade in gently
-    const now = ctx.currentTime;
-    master.gain.linearRampToValueAtTime(0.35, now + 0.6);
-
-    // Low horn drone — two detuned sines an octave apart for weight
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = 65.4; // C2
-    const osc2 = ctx.createOscillator();
-    osc2.type = "triangle";
-    osc2.frequency.value = 98; // G2 fifth — heroic interval
-    const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.12;
-    // slow LFO for shimmer
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.15;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.02;
-    lfo.connect(lfoGain);
-    lfoGain.connect(droneGain.gain);
-    osc.connect(droneGain);
-    osc2.connect(droneGain);
-    droneGain.connect(master);
-    osc.start();
-    osc2.start();
-    lfo.start();
-    droneRef.current = { osc, gain: droneGain, osc2 };
-
-    // Drum pattern: BOOM . boom BOOM . . boom . (8-step, kick + occasional accent)
-    // 1 = accent kick, 2 = soft kick, 0 = rest
-    const pattern = [1, 0, 2, 1, 0, 0, 2, 0];
-    stepRef.current = 0;
-    const stepMs = BEAT_MS / 2; // eighth notes
-
-    const tick = () => {
-      const idx = stepRef.current % pattern.length;
-      const hit = pattern[idx];
-      if (hit === 1) kick(ctx, master, 1.0);
-      else if (hit === 2) kick(ctx, master, 0.55);
-      stepRef.current++;
-      timerRef.current = window.setTimeout(tick, stepMs);
-    };
-    tick();
+    const a = ensureAudio();
+    // Restart from top for a fresh cinematic hit each time Atlas thinks.
+    try { a.currentTime = 0; } catch { /* ignore */ }
+    a.volume = 0;
+    const p = a.play();
+    if (p && typeof p.catch === "function") {
+      p.catch(() => { /* autoplay blocked; will retry on next user gesture */ });
+    }
+    fadeTo(TARGET_VOLUME, FADE_IN_MS);
   }
 
   function stop() {
-    const ctx = ctxRef.current;
-    const master = masterRef.current;
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (ctx && master) {
-      const now = ctx.currentTime;
-      try {
-        master.gain.cancelScheduledValues(now);
-        master.gain.setValueAtTime(master.gain.value, now);
-        master.gain.linearRampToValueAtTime(0, now + 0.35);
-      } catch { /* ignore */ }
-      window.setTimeout(() => {
-        try { droneRef.current?.osc.stop(); } catch { /* ignore */ }
-        try { droneRef.current?.osc2.stop(); } catch { /* ignore */ }
-        try { master.disconnect(); } catch { /* ignore */ }
-        droneRef.current = null;
-        masterRef.current = null;
-      }, 400);
-    }
+    const a = audioRef.current;
+    if (!a) return;
+    fadeTo(0, FADE_OUT_MS, () => {
+      try { a.pause(); } catch { /* ignore */ }
+    });
   }
-}
-
-/** Deep war-drum kick — pitch sweep + noise crack for impact. */
-function kick(ctx: AudioContext, out: AudioNode, velocity: number) {
-  const t = ctx.currentTime;
-  // Body: sine pitch sweep from 120Hz -> 45Hz
-  const body = ctx.createOscillator();
-  body.type = "sine";
-  body.frequency.setValueAtTime(120, t);
-  body.frequency.exponentialRampToValueAtTime(45, t + 0.18);
-  const bodyGain = ctx.createGain();
-  bodyGain.gain.setValueAtTime(0, t);
-  bodyGain.gain.linearRampToValueAtTime(0.9 * velocity, t + 0.005);
-  bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-  body.connect(bodyGain).connect(out);
-  body.start(t);
-  body.stop(t + 0.4);
-
-  // Noise attack crack for that leather-drum snap
-  const bufferSize = ctx.sampleRate * 0.08;
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
-  const noiseFilter = ctx.createBiquadFilter();
-  noiseFilter.type = "bandpass";
-  noiseFilter.frequency.value = 800;
-  noiseFilter.Q.value = 0.7;
-  const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.25 * velocity, t);
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-  noise.connect(noiseFilter).connect(noiseGain).connect(out);
-  noise.start(t);
-  noise.stop(t + 0.1);
 }
