@@ -68,20 +68,35 @@ export default function Atlas() {
       const res = await apiRequest("POST", "/api/coach/chat", body, { keepalive: true });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setPendingUserMsg(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      // Invalidate everything Atlas may have written to — keeps DATA screen fresh.
+      // Only refresh the conversation itself immediately — that's what the user
+      // sees. Everything else is deferred and only invalidated if Atlas actually
+      // wrote to it, so we don't spam 10 background requests during the paint.
       queryClient.invalidateQueries({ queryKey: ["/api/coach/conversation"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/scans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/macros?start=2020-01-01&end=2099-12-31"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fasts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/uploads"] });
+
+      const logged = Array.isArray(data?.decisions?.logged) ? data.decisions.logged : [];
+      const kinds = new Set<string>(logged.map((l: any) => l?.type));
+      const wroteSomething = kinds.size > 0;
+
+      if (wroteSomething) {
+        // Defer secondary refreshes to idle time so they don't compete with
+        // the paint of Atlas's incoming reply on the main thread.
+        const runIdle = (fn: () => void) => {
+          const w = window as any;
+          if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(fn, { timeout: 800 });
+          else setTimeout(fn, 400);
+        };
+        runIdle(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/fitness/dashboard"] });
+          if (kinds.has("body_scan")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/scans"] });
+          if (kinds.has("macro")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/macros?start=2020-01-01&end=2099-12-31"] });
+          if (kinds.has("workout_completed")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts"] });
+        });
+      }
     },
     onError: () => {
       // Do NOT put the text back into the composer — that surprised Tyler when
@@ -104,7 +119,26 @@ export default function Atlas() {
         createdAt: new Date().toISOString(),
       } as any]
     : serverMessages;
-  const isThinking = sendMutation.isPending;
+  // Show thinking bubble whenever there's a pending message OR the mutation is
+  // in flight. Using pendingUserMsg makes it appear on the SAME paint as the
+  // user's bubble, instead of waiting for React to flush mutation.isPending.
+  const rawThinking = sendMutation.isPending || pendingUserMsg !== null;
+  const [showThinking, setShowThinking] = useState(false);
+  const thinkingSinceRef = useRef<number>(0);
+  useEffect(() => {
+    if (rawThinking) {
+      thinkingSinceRef.current = performance.now();
+      setShowThinking(true);
+      return;
+    }
+    // When mutation ends, keep the bubble visible for a minimum of 500ms so it
+    // never flashes past the user's eye. Feels like a real coach thinking.
+    const elapsed = performance.now() - thinkingSinceRef.current;
+    const remaining = Math.max(0, 500 - elapsed);
+    const t = window.setTimeout(() => setShowThinking(false), remaining);
+    return () => window.clearTimeout(t);
+  }, [rawThinking]);
+  const isThinking = showThinking;
 
   // Spartan war-drum motif while Atlas is composing his response.
   // Requires an explicit user opt-in via the mute button because the 15MB MP3
@@ -112,10 +146,11 @@ export default function Atlas() {
   useAtlasThinkingSound(isThinking && !muted && soundOptedIn);
   const hasMessages = messages.length > 0;
 
-  // Auto-scroll to bottom whenever messages or thinking state changes
+  // Auto-scroll to bottom whenever messages or thinking state changes. Use
+  // instant scroll (not smooth) so iOS doesn't queue it behind other work.
   useEffect(() => {
-    const el = bottomRef.current;
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
+    // Jump the page scroll directly — fastest, no smooth animation queue.
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "auto" });
   }, [messages.length, isThinking]);
 
   // On first load with existing messages, jump straight to bottom of the PAGE
