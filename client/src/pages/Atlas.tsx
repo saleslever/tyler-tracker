@@ -337,7 +337,14 @@ export default function Atlas() {
 
           {/* ── CONVERSATION ── */}
           {hasMessages && (
-            <div className="py-4 space-y-3">
+            <div
+              className="pt-4 space-y-3"
+              style={{
+                // Space at the bottom so the last message clears the sticky
+                // composer (~5rem) and the fixed tab bar (~3.5rem) plus safe area.
+                paddingBottom: "calc(9rem + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
               {messages.map((m) => (
                 <MessageBubble key={m.id} message={m} />
               ))}
