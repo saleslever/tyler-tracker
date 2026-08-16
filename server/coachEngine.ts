@@ -17,7 +17,7 @@ import {
   createBodyScan, upsertMacroLog, upsertRecoveryLog, logWorkoutSets,
   deleteBodyScan, deleteMacroLog, deleteRecoveryLog,
   adminPurgeWorkoutsOnDate, adminRepatchMacroDate,
-  listMacroLogsRange,
+  listMacroLogsRange, upsertWorkoutPlan,
 } from "./coachStorage";
 import { db } from "./storage";
 import { bodyScans, macroLogs, recoveryLogs, workoutLogs, DIRECT_BODY_PARTS } from "@shared/schema";
@@ -318,12 +318,19 @@ Schema for the JSON:
     {"type": "update_macro", "id": <row id>, "calories": <n?>, "proteinG": <n?>, "fatG": <n?>, "carbsG": <n?>, "date": "YYYY-MM-DD?"},
     {"type": "update_recovery", "id": <row id>, "sleepHours": <n?>, "whoopRecoveryPct": <n?>, "hrvMs": <n?>, "restingHr": <n?>, "strain": <n?>}
   ],
+  // Single plan for one day:
   "workoutPlanToSet": {
     "date": "YYYY-MM-DD",
     "dayType": "upper|lower|push|pull|full|custom",
     "exercises": [{"name": "...", "sets": <n>, "repsMin": <n>, "repsMax": <n>, "targetBodyPart": "one of: ${validBodyParts}", "notes": "..."}],
-    "targetSetsByBodyPart": {"chest": 6, "back": 6}
+    "targetSetsByBodyPart": {"chest": 6, "back": 6},
+    "notes": "one-line summary Tyler can scan later"
   },
+  // OR multiple plans (multi-day split): use `workoutPlansToSet` as an array of the same shape.
+  "workoutPlansToSet": [
+    {"date": "YYYY-MM-DD", "dayType": "push", "exercises": [ ... ], "notes": "..."},
+    {"date": "YYYY-MM-DD", "dayType": "pull", "exercises": [ ... ], "notes": "..."}
+  ],
   "memoryToAdd": [{"kind": "preference|injury|constraint|context", "fact": "..."}]
 }
 \`\`\`
@@ -341,7 +348,7 @@ Do NOT emit a \`log\` entry when:
 - You're paraphrasing or referencing existing rows in a conversation about the past.
 - No new screenshot and no new number was given in this turn.
 
-Emit \`workoutPlanToSet\` only when Tyler asks for a plan or shares a plan for future days.
+Emit `workoutPlanToSet` any time Tyler describes, sends, or asks you to plan a workout for a specific date (today or future). Extract from screenshots too: read the exercises, sets, and rep ranges out of the image and emit them. You AUTO-SAVE the plan the moment you emit it — Tyler no longer has to confirm. Include a `notes` field with a short one-line summary he can scan later (e.g., `Push Day A: bench, incline, OHP, dips`). Always include a `date` in YYYY-MM-DD. If he doesn't specify a date, default to today (${ctx.today}). If the plan spans multiple days, emit one `workoutPlanToSet` per day.
 Emit \`memoryToAdd\` for durable new facts about Tyler (preferences, rules, injuries, schedule).
 
 CRITICAL FORMATTING RULE: The \`decisions\` block is machine-parsed and hidden from Tyler. It must be VALID JSON — no comments, no trailing commas, no ellipsis, no truncation. If you have nothing to log, plan, or remember, do NOT emit the block at all. Never emit a partial or placeholder decisions block.
@@ -642,6 +649,37 @@ export async function askCoach(
           summary: `WRITE FAILED: ${e?.message ?? String(e)}`,
         });
       }
+    }
+  }
+
+  // AUTO-APPLY plans. Atlas has full authority. Accepts either a single
+  // workoutPlanToSet object or an array workoutPlansToSet (multi-day splits).
+  const plansToApply: any[] = [];
+  if (decisions?.workoutPlanToSet && decisions.workoutPlanToSet.date && Array.isArray(decisions.workoutPlanToSet.exercises)) {
+    plansToApply.push(decisions.workoutPlanToSet);
+  }
+  if (Array.isArray(decisions?.workoutPlansToSet)) {
+    for (const p of decisions.workoutPlansToSet) {
+      if (p?.date && Array.isArray(p.exercises)) plansToApply.push(p);
+    }
+  }
+  for (const p of plansToApply) {
+    try {
+      const row = await upsertWorkoutPlan({
+        date: p.date,
+        dayType: p.dayType ?? "custom",
+        exercises: p.exercises,
+        targetSetsByBodyPart: p.targetSetsByBodyPart ?? null,
+        notes: p.notes ?? null,
+        generatedBy: "coach",
+      } as any);
+      logged.push({
+        type: "workout_planned",
+        summary: `${p.date}  plan saved: ${p.exercises.length} exercise${p.exercises.length === 1 ? "" : "s"} (${p.dayType ?? "custom"})${p.notes ? ` — ${p.notes}` : ""}`,
+        id: (row as any)?.id,
+      });
+    } catch (e: any) {
+      logged.push({ type: "workout_planned", summary: `PLAN WRITE FAILED: ${e?.message ?? String(e)}` });
     }
   }
 

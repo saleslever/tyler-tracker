@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "node:http";
 import { storage } from "./storage";
+import { todayLocal } from "./tz";
 import {
   insertDailyLogSchema,
   insertTaskSchema,
@@ -40,7 +41,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.getHabits(),
     ]);
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename="tyler-tracker-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.setHeader("Content-Disposition", `attachment; filename="tyler-tracker-backup-${todayLocal()}.json"`);
     res.json({
       exportedAt: new Date().toISOString(),
       version: 1,
@@ -134,7 +135,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Challenges
   app.get("/api/challenges", async (_req, res) => res.json(await storage.getChallenges()));
   app.get("/api/challenges/active", async (req, res) => {
-    const today = (req.query.today as string) || new Date().toISOString().slice(0, 10);
+    const today = (req.query.today as string) || todayLocal();
     const active = await storage.getActiveChallenge(today);
     res.json(active ?? null);
   });

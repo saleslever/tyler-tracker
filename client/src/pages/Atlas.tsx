@@ -94,7 +94,8 @@ export default function Atlas() {
           queryClient.invalidateQueries({ queryKey: ["/api/fitness/dashboard"] });
           if (kinds.has("body_scan")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/scans"] });
           if (kinds.has("macro")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/macros?start=2020-01-01&end=2099-12-31"] });
-          if (kinds.has("workout_completed")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts"] });
+          if (kinds.has("workout_completed") || kinds.has("workout_planned")) queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts"] });
+          if (kinds.has("workout_planned")) queryClient.invalidateQueries({ queryKey: ["/api/coach/plan"] });
         });
       }
     },

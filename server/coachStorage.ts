@@ -9,6 +9,7 @@
  */
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "./storage";
+import { todayLocal, addDaysLocal, dateLocal } from "./tz";
 import {
   coachSettings, InsertCoachSettings, CoachSettings,
   coachMemory, InsertCoachMemory, CoachMemory,
@@ -241,7 +242,7 @@ export async function computeWeeklyLedger(endDate: string): Promise<Record<strin
   const offsetToMonday = dow === 0 ? 6 : dow - 1;
   const start = new Date(end);
   start.setDate(end.getDate() - offsetToMonday);
-  const startStr = start.toISOString().slice(0, 10);
+  const startStr = dateLocal(start);
 
   const rows = await listWorkoutLogsRange(startStr, endDate);
   const ledger: Record<string, number> = {};

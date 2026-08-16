@@ -22,6 +22,7 @@ import {
   recentConversation,
 } from "./coachStorage";
 import { askCoach, generateWorkout, extractFromImage } from "./coachEngine";
+import { todayLocal, addDaysLocal, dateLocal } from "./tz";
 
 // Classify a screenshot into one of the ingest categories.
 // Used by the bulk-ingest admin endpoint.
@@ -146,7 +147,7 @@ export function registerCoachRoutes(app: Express) {
       if (!Array.isArray(images) || images.length === 0) throw new Error("images[] required");
 
       const receipts: Array<{ file: string; kind: string; result: string; date?: string }> = [];
-      const FALLBACK_DATE = new Date().toISOString().slice(0, 10);
+      const FALLBACK_DATE = todayLocal();
 
       for (const img of images) {
         try {
@@ -634,8 +635,8 @@ export function registerCoachRoutes(app: Express) {
   // Composes an Overview-page payload from real data. No mocks.
   app.get("/api/fitness/overview", async (_req, res) => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+      const today = todayLocal();
+      const yesterday = addDaysLocal(-1);
 
       // Pull all sources we can derive score signals from
       const [scan, target, goal, recovery, macros7, weeklyLedger, workoutLogs30] = await Promise.all([
@@ -643,13 +644,13 @@ export function registerCoachRoutes(app: Express) {
         currentNutritionTarget(),
         getActiveGoal(),
         latestRecoveryLog(),
-        listMacroLogsRange(new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10), today),
+        listMacroLogsRange(addDaysLocal(-6), today),
         computeWeeklyLedger(today),
-        listWorkoutLogsRange(new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10), today),
+        listWorkoutLogsRange(addDaysLocal(-29), today),
       ]);
 
       const scans = await listBodyScans(60);
-      const macros30 = await listMacroLogsRange(new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10), today);
+      const macros30 = await listMacroLogsRange(addDaysLocal(-29), today);
 
       // ── Score pillars (0-10 each) ──
       // Training Load: % of weekly ledger cap hit
@@ -668,7 +669,7 @@ export function registerCoachRoutes(app: Express) {
         : 0;
 
       // Consistency: workout-days over last 7
-      const uniqueDays = new Set(workoutLogs30.filter(w => w.date >= new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10)).map(w => w.date));
+      const uniqueDays = new Set(workoutLogs30.filter(w => w.date >= addDaysLocal(-6)).map(w => w.date));
       const consistency = Math.min(10, (uniqueDays.size / 5) * 10);
 
       // Composite score (weighted, 0-300 range so it reads big)
@@ -680,7 +681,7 @@ export function registerCoachRoutes(app: Express) {
       const yesterdayLedger = await computeWeeklyLedger(yesterday);
       const ySets = Object.values(yesterdayLedger).reduce((a, b) => a + b, 0);
       const yTrainingLoad = Math.min(10, (ySets / setCap) * 10);
-      const yMacros7 = await listMacroLogsRange(new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10), yesterday);
+      const yMacros7 = await listMacroLogsRange(addDaysLocal(-7), yesterday);
       const yProteinHits = yMacros7.filter(m => (m.proteinG ?? 0) >= proteinTarget * 0.9).length;
       const yNutrition = yMacros7.length > 0 ? Math.min(10, (yProteinHits / 7) * 10) : 0;
       const compositeYesterday = Math.round(
@@ -693,11 +694,11 @@ export function registerCoachRoutes(app: Express) {
       const dayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 864e5);
-        const dstr = d.toISOString().slice(0, 10);
+        const dstr = dateLocal(d);
         const dl = await computeWeeklyLedger(dstr);
         const ds = Object.values(dl).reduce((a, b) => a + b, 0);
         const dTrainingLoad = Math.min(10, (ds / setCap) * 10);
-        const dMacros = await listMacroLogsRange(new Date(d.getTime() - 6 * 864e5).toISOString().slice(0, 10), dstr);
+        const dMacros = await listMacroLogsRange(dateLocal(new Date(d.getTime() - 6 * 864e5)), dstr);
         const dPhits = dMacros.filter(m => (m.proteinG ?? 0) >= proteinTarget * 0.9).length;
         const dNutrition = dMacros.length > 0 ? Math.min(10, (dPhits / 7) * 10) : 0;
         const dScore = Math.round((dTrainingLoad * 8) + (dNutrition * 8) + (recoveryPillar * 7) + (consistency * 7));
@@ -712,7 +713,7 @@ export function registerCoachRoutes(app: Express) {
         let sum = 0;
         for (let i = 0; i < 7; i++) {
           const d = new Date(Date.now() - (i + w * 7) * 864e5);
-          const dstr = d.toISOString().slice(0, 10);
+          const dstr = dateLocal(d);
           const dl = await computeWeeklyLedger(dstr);
           const ds = Object.values(dl).reduce((a, b) => a + b, 0);
           sum += Math.round(Math.min(10, (ds / setCap) * 10) * 8);
@@ -766,7 +767,7 @@ export function registerCoachRoutes(app: Express) {
       });
       const thisWeekTop: Record<string, number> = {};
       const lastWeekTop: Record<string, number> = {};
-      const thisWeekStart = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+      const thisWeekStart = addDaysLocal(-6);
       for (const w of workoutLogs30) {
         const key = w.exerciseName || "";
         const wt = w.weight ?? 0;
@@ -785,7 +786,7 @@ export function registerCoachRoutes(app: Express) {
       const sleepGoal = 7;
       // Simple: count days recovery > 60% as "good sleep"
       const recovery7 = await Promise.all(
-        Array.from({ length: 7 }).map((_, i) => getRecoveryLog(new Date(Date.now() - i * 864e5).toISOString().slice(0, 10)))
+        Array.from({ length: 7 }).map((_, i) => getRecoveryLog(addDaysLocal(-(i))))
       );
       const sleepHits = recovery7.filter(r => (r?.whoopRecoveryPct ?? 0) >= 60).length;
 
@@ -827,7 +828,7 @@ export function registerCoachRoutes(app: Express) {
       const calendar: { date: string; day: number; label: string; kind: string; isToday: boolean }[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 864e5);
-        const dstr = d.toISOString().slice(0, 10);
+        const dstr = dateLocal(d);
         const dayLogs = workoutLogs30.filter(w => w.date === dstr);
         const dayMacro = macros30.find(m => m.date === dstr);
         let kind = "rest";
@@ -903,9 +904,9 @@ export function registerCoachRoutes(app: Express) {
   // Composes all metrics needed for the new Analytics page.
   app.get("/api/fitness/dashboard", async (_req, res) => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocal();
       const daysBack = 84; // ~12 weeks of history
-      const startDate = new Date(Date.now() - daysBack * 864e5).toISOString().slice(0, 10);
+      const startDate = addDaysLocal(-(daysBack));
 
       const [scans, macros, workoutLogs, weeklyLedger, goal, dailyLogsAll, fastsAll] = await Promise.all([
         listBodyScans(120),
@@ -948,7 +949,7 @@ export function registerCoachRoutes(app: Express) {
         const dow = d.getDay(); // Sun=0, Mon=1..Sat=6
         const offset = dow === 0 ? 6 : dow - 1;
         start.setDate(d.getDate() - offset); // Monday
-        return start.toISOString().slice(0, 10);
+        return dateLocal(start);
       }
       const byWeek = new Map<string, { date: string; weight: number }[]>();
       for (const p of mergedWeights) {
@@ -975,7 +976,7 @@ export function registerCoachRoutes(app: Express) {
       const remaining = Number((currentWeight - targetWeight).toFixed(1));
       const requiredPerWeek = Number(((remaining / daysToTarget) * 7).toFixed(2));
       // Actual rate over last 28 days
-      const recent = mergedWeights.filter(w => w.date >= new Date(Date.now() - 28 * 864e5).toISOString().slice(0, 10));
+      const recent = mergedWeights.filter(w => w.date >= addDaysLocal(-28));
       let actualPerWeek = 0;
       if (recent.length >= 2) {
         const first = recent[0];
@@ -984,7 +985,7 @@ export function registerCoachRoutes(app: Express) {
         actualPerWeek = Number((((first.weight - last.weight) / dayDiff) * 7).toFixed(2));
       }
       const projectedDate = actualPerWeek > 0
-        ? new Date(Date.now() + (remaining / actualPerWeek) * 7 * 864e5).toISOString().slice(0, 10)
+        ? addDaysLocal((remaining / actualPerWeek) * 7)
         : null;
       const onTrack = actualPerWeek > 0 && actualPerWeek >= requiredPerWeek * 0.9;
 
@@ -1020,7 +1021,7 @@ export function registerCoachRoutes(app: Express) {
       for (const l of dailyLogsAll || []) logsByDate.set(l.date, l);
       let soberStreak = 0;
       for (let i = 0; i < 365; i++) {
-        const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+        const d = addDaysLocal(-(i));
         const l = logsByDate.get(d);
         if (l && l.noAlcohol === 1) soberStreak++;
         else if (i === 0) continue; // today may not be logged yet; keep going
@@ -1048,7 +1049,7 @@ export function registerCoachRoutes(app: Express) {
       // ── Step counts (last 14 days from daily_logs.steps) ──
       const stepSeries: { date: string; steps: number; hit10k: boolean }[] = [];
       for (let i = 13; i >= 0; i--) {
-        const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+        const d = addDaysLocal(-(i));
         const l = logsByDate.get(d);
         const steps = l?.steps ?? 0;
         stepSeries.push({ date: d, steps, hit10k: steps >= 10000 });
@@ -1057,7 +1058,7 @@ export function registerCoachRoutes(app: Express) {
 
       // ── Protein daily hits (200g target) ──
       const proteinHits14 = macros
-        .filter(m => m.date >= new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10))
+        .filter(m => m.date >= addDaysLocal(-13))
         .map(m => ({ date: m.date, hit: (m.proteinG ?? 0) >= 200 }));
 
       // ── Workouts this week count ──
@@ -1066,7 +1067,7 @@ export function registerCoachRoutes(app: Express) {
       const dow = weekStart.getDay(); // Sun=0, Mon=1..Sat=6
       const offsetToMonday = dow === 0 ? 6 : dow - 1;
       weekStart.setDate(weekStart.getDate() - offsetToMonday);
-      const weekStartStr = weekStart.toISOString().slice(0, 10);
+      const weekStartStr = dateLocal(weekStart);
       const workoutsThisWeek = new Set(workoutLogs.filter(w => w.date >= weekStartStr).map(w => w.date)).size;
       // Note: weekStart is Monday-anchored (see mondayOf helper below)
 
