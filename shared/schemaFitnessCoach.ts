@@ -258,6 +258,7 @@ export const coachConversations = pgTable("coach_conversations", {
   content: text("content").notNull(),
   contextSnapshot: jsonb("context_snapshot"),                 // ledger + targets + recent workouts at the moment of response
   decisions: jsonb("decisions"),                              // structured plan changes if any
+  imageUrls: jsonb("image_urls"),                             // array of image data URLs or paths (for user turns with attached photos)
   model: text("model"),                                       // e.g. 'claude_sonnet_4_6'
   createdAt: text("created_at").notNull(),
 });

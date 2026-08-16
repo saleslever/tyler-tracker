@@ -415,6 +415,7 @@ export async function askCoach(
   ctx: CoachContext,
   userMessage: string,
   imageDataUrls?: string[],
+  imageThumbnails?: string[],
 ): Promise<CoachResponse> {
   const systemPrompt = buildSystemPrompt(ctx);
 
@@ -454,16 +455,20 @@ export async function askCoach(
     memoryCount: ctx.memory.length,
   };
 
-  // Log user turn first (record image count so we have an audit trail)
+  // Log user turn first (thumbnails are stored on the row so the chat renders images)
   const imgCount = validImages.length;
+  const cleanThumbs = Array.isArray(imageThumbnails)
+    ? imageThumbnails.filter(u => typeof u === "string" && u.startsWith("data:image/"))
+    : [];
   await logConversation({
     date: ctx.today,
     role: "user",
-    content: imgCount > 0 ? `${userMessage}\n[${imgCount} image${imgCount === 1 ? "" : "s"} attached]` : userMessage,
+    content: userMessage || (imgCount > 0 ? `[${imgCount} image${imgCount === 1 ? "" : "s"} attached]` : ""),
     contextSnapshot,
     decisions: null as any,
+    imageUrls: cleanThumbs.length > 0 ? cleanThumbs : null,
     model: null as any,
-  });
+  } as any);
 
   let responseText: string;
   let errorMsg: string | undefined;

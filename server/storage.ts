@@ -276,6 +276,13 @@ export async function ensureSchema() {
     );
   `);
 
+  // Additive migrations for coach_conversations — add image_urls column so
+  // user turns can persist attached photo thumbnails inline in the chat.
+  await pool.query(`
+    ALTER TABLE IF EXISTS coach_conversations
+      ADD COLUMN IF NOT EXISTS image_urls JSONB;
+  `);
+
   // Seed default rituals on first boot (only if the table is empty)
   const existing = await pool.query(`SELECT COUNT(*)::int AS n FROM rituals`);
   if (existing.rows[0].n === 0) {

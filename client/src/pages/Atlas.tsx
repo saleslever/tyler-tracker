@@ -58,9 +58,10 @@ export default function Atlas() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (payload: { message: string; imageDataUrls?: string[] }) => {
+    mutationFn: async (payload: { message: string; imageDataUrls?: string[]; imageThumbnails?: string[] }) => {
       const body: any = { message: payload.message };
       if (payload.imageDataUrls && payload.imageDataUrls.length > 0) body.imageDataUrls = payload.imageDataUrls;
+      if (payload.imageThumbnails && payload.imageThumbnails.length > 0) body.imageThumbnails = payload.imageThumbnails;
       // keepalive keeps the POST alive even if the tab is backgrounded or unloaded.
       // Only effective for bodies <60KB (text-only). Image sends fall back to normal fetch.
       const res = await apiRequest("POST", "/api/coach/chat", body, { keepalive: true });
@@ -69,9 +70,17 @@ export default function Atlas() {
     onSuccess: () => {
       setPendingUserMsg(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      // Invalidate everything Atlas may have written to — keeps DATA screen fresh.
       queryClient.invalidateQueries({ queryKey: ["/api/coach/conversation"] });
       queryClient.invalidateQueries({ queryKey: ["/api/coach/context"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fitness/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/scans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/macros?start=2020-01-01&end=2099-12-31"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fitness/workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fasts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/uploads"] });
     },
     onError: () => {
       // Do NOT put the text back into the composer — that surprised Tyler when
@@ -90,8 +99,9 @@ export default function Atlas() {
         date: new Date().toISOString().slice(0, 10),
         role: "user" as const,
         content: pendingUserMsg.content,
+        imageUrls: pendingUserMsg.images.length > 0 ? pendingUserMsg.images : undefined,
         createdAt: new Date().toISOString(),
-      }]
+      } as any]
     : serverMessages;
   const isThinking = sendMutation.isPending;
 
@@ -144,19 +154,45 @@ export default function Atlas() {
     if (!trimmed && images.length === 0) return;
     playClickSound();
     const imageDataUrls = images.map(i => i.dataUrl);
-    // Clear input IMMEDIATELY and show user bubble optimistically
-    setPendingUserMsg({ content: trimmed, images: imageDataUrls });
+    const imageThumbnails = images.map(i => i.thumbUrl);
+    // Clear input IMMEDIATELY and show user bubble optimistically with thumbnails
+    setPendingUserMsg({ content: trimmed, images: imageThumbnails });
     setInput("");
     setImages([]);
     // Reset textarea height
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    sendMutation.mutate({ message: trimmed, imageDataUrls });
+    sendMutation.mutate({ message: trimmed, imageDataUrls, imageThumbnails });
+  }
+
+  // Downscale a data URL to a small JPEG thumbnail for chat storage.
+  async function makeThumbnail(dataUrl: string, maxDim = 400, quality = 0.7): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(dataUrl);
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
   }
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
-    const accepted: { dataUrl: string; name: string }[] = [];
+    const accepted: { dataUrl: string; thumbUrl: string; name: string }[] = [];
     for (const file of files) {
       if (!file.type.startsWith("image/")) continue;
       if (file.size > 15 * 1024 * 1024) { alert(`${file.name} is over 15MB, skipping.`); continue; }
@@ -166,7 +202,8 @@ export default function Atlas() {
         reader.onerror = () => reject(new Error("read failed"));
         reader.readAsDataURL(file);
       });
-      accepted.push({ dataUrl, name: file.name });
+      const thumbUrl = await makeThumbnail(dataUrl);
+      accepted.push({ dataUrl, thumbUrl, name: file.name });
     }
     if (accepted.length > 0) setImages((prev) => [...prev, ...accepted]);
   }
@@ -301,7 +338,7 @@ export default function Atlas() {
             <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
               {images.map((img, i) => (
                 <div key={i} className="relative flex-shrink-0">
-                  <img src={img.dataUrl} alt={img.name} className="w-14 h-14 rounded object-cover border border-card-border" />
+                  <img src={img.thumbUrl} alt={img.name} className="w-14 h-14 rounded object-cover border border-card-border" />
                   <button
                     onClick={() => setImages(images.filter((_, j) => j !== i))}
                     className="absolute -top-1 -right-1 bg-background border border-card-border rounded-full w-5 h-5 flex items-center justify-center"
@@ -488,8 +525,22 @@ function MessageBubble({ message }: { message: Conversation }) {
           ? "bg-primary text-primary-foreground rounded-br-sm"
           : "bg-card border border-card-border text-foreground rounded-bl-sm"
       )}>
+        {/* Image thumbnails (user messages with attached photos) */}
+        {Array.isArray((message as any).imageUrls) && (message as any).imageUrls.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {(message as any).imageUrls.map((url: string, i: number) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={url}
+                  alt={`attachment ${i + 1}`}
+                  className="w-24 h-24 object-cover rounded-lg border border-white/20"
+                />
+              </a>
+            ))}
+          </div>
+        )}
         {isUser
-          ? <div className="whitespace-pre-wrap">{message.content}</div>
+          ? (message.content && !message.content.startsWith("[") && <div className="whitespace-pre-wrap">{message.content}</div>)
           : <MarkdownLite content={message.content} />}
         {logged && logged.length > 0 && (
           <div className="mt-3 pt-3 border-t border-current/10 space-y-1.5">

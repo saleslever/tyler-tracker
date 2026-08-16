@@ -335,8 +335,13 @@ export function registerCoachRoutes(app: Express) {
         return res.status(400).json({ error: "message or imageDataUrls required" });
       }
       const message = z.string().max(4000).parse(rawMessage);
+      // Thumbnails (smaller data URLs) are what's actually stored on the message row
+      const rawThumbs: string[] = Array.isArray(req.body?.imageThumbnails)
+        ? req.body.imageThumbnails.filter((u: any) => typeof u === "string")
+        : [];
+      const imageThumbnails = rawThumbs.filter(u => u.startsWith("data:image/"));
       const ctx = await buildCoachContext();
-      const response = await askCoach(ctx, message, imageDataUrls);
+      const response = await askCoach(ctx, message, imageDataUrls, imageThumbnails);
       res.json(response);
     } catch (e) { err(res, e); }
   });
