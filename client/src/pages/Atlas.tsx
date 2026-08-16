@@ -33,7 +33,8 @@ const QUICK_STARTS = [
 export default function Atlas() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [soundOptedIn, setSoundOptedIn] = useState(false);
 
   // Add body class while composer focused so tab bar can hide (iOS keyboard fix)
   useEffect(() => {
@@ -105,8 +106,10 @@ export default function Atlas() {
     : serverMessages;
   const isThinking = sendMutation.isPending;
 
-  // Spartan war-drum motif while Atlas is composing his response
-  useAtlasThinkingSound(isThinking && !muted);
+  // Spartan war-drum motif while Atlas is composing his response.
+  // Requires an explicit user opt-in via the mute button because the 15MB MP3
+  // otherwise blocks the main thread on iOS when Atlas is thinking.
+  useAtlasThinkingSound(isThinking && !muted && soundOptedIn);
   const hasMessages = messages.length > 0;
 
   // Auto-scroll to bottom whenever messages or thinking state changes
@@ -165,7 +168,8 @@ export default function Atlas() {
   }
 
   // Downscale a data URL to a small JPEG thumbnail for chat storage.
-  async function makeThumbnail(dataUrl: string, maxDim = 400, quality = 0.7): Promise<string> {
+  // Kept small (max 240px, quality 0.55) so iOS can decode 10+ inline without freezing.
+  async function makeThumbnail(dataUrl: string, maxDim = 240, quality = 0.55): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -239,7 +243,10 @@ export default function Atlas() {
               </div>
             </div>
             <button
-              onClick={() => setMuted((m) => !m)}
+              onClick={() => {
+                setMuted((m) => !m);
+                setSoundOptedIn(true);
+              }}
               className="p-2 rounded-full hover:bg-primary/5 text-muted-foreground shrink-0"
               aria-label={muted ? "Unmute cinematic score" : "Mute cinematic score"}
               data-testid="button-mute-atlas"
@@ -533,7 +540,11 @@ function MessageBubble({ message }: { message: Conversation }) {
                 <img
                   src={url}
                   alt={`attachment ${i + 1}`}
-                  className="w-24 h-24 object-cover rounded-lg border border-white/20"
+                  className="w-20 h-20 object-cover rounded-lg border border-white/20"
+                  loading="lazy"
+                  decoding="async"
+                  width={80}
+                  height={80}
                 />
               </a>
             ))}
