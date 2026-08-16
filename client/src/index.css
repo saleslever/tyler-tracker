@@ -164,9 +164,10 @@
   /* Atlas chat shell — fill the viewport between the fixed mobile top bar and bottom nav.
      Bottom clearance is 3.5rem nav + 0.75rem for the primary Atlas button that pokes up,
      plus the iOS safe-area inset. On desktop, both bars disappear (md:hidden). */
-  /* atlas-shell height uses --atlas-vh (set from visualViewport by JS) when available.
-     Falls back to 100dvh. On iOS Safari, --atlas-vh shrinks when the keyboard opens
-     so the composer sits flush against it — 100dvh alone does not shrink. */
+  /* atlas-shell fills the space between the fixed header and the fixed bottom nav.
+     No explicit height — top+bottom positioning does the work. iOS Safari keyboard
+     is handled by the inner composer (position: sticky bottom inside the shell)
+     and the shell content scrolls above it. */
   .atlas-shell {
     position: fixed;
     left: 0;
@@ -174,14 +175,6 @@
     top: calc(3.5rem + env(safe-area-inset-top, 0px));
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
     z-index: 30;
-    height: calc(var(--atlas-vh, 100dvh) - 3.5rem - 3.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  }
-  /* When keyboard is up (composer focused), hide tab bar so composer sits flush against keyboard */
-  html.atlas-composing .atlas-tabs-conditional { display: none; }
-  html.atlas-composing .atlas-shell {
-    bottom: 0;
-    /* No tab bar in composing mode, so subtract only header + safe-area-top from the visible viewport. */
-    height: calc(var(--atlas-vh, 100dvh) - 3.5rem - env(safe-area-inset-top, 0px));
   }
   @media (min-width: 768px) {
     .atlas-shell {

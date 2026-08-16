@@ -42,30 +42,10 @@ export default function Atlas() {
     return () => document.documentElement.classList.remove("atlas-composing");
   }, [isFocused]);
 
-  // Track the iOS visual viewport (shrinks when keyboard opens). Set atlas-shell height
-  // to the actual visible area so the composer sits flush against the keyboard.
-  useEffect(() => {
-    const vv = (window as any).visualViewport as VisualViewport | undefined;
-    if (!vv) return;
-    const applyHeight = () => {
-      // Only relevant on mobile (md: uses 100dvh)
-      if (window.innerWidth >= 768) {
-        document.documentElement.style.removeProperty("--atlas-vh");
-        return;
-      }
-      document.documentElement.style.setProperty("--atlas-vh", `${vv.height}px`);
-    };
-    applyHeight();
-    vv.addEventListener("resize", applyHeight);
-    vv.addEventListener("scroll", applyHeight);
-    window.addEventListener("resize", applyHeight);
-    return () => {
-      vv.removeEventListener("resize", applyHeight);
-      vv.removeEventListener("scroll", applyHeight);
-      window.removeEventListener("resize", applyHeight);
-      document.documentElement.style.removeProperty("--atlas-vh");
-    };
-  }, []);
+  // (Previously tried to override --atlas-vh from visualViewport for iOS keyboard.
+  // That caused the composer to collapse to zero height on some devices. Removed.
+  // The layout now relies on plain position:fixed top/bottom which iOS Safari
+  // handles well enough as long as we don't fight it with explicit heights.)
   const [images, setImages] = useState<{ dataUrl: string; name: string }[]>([]);
   const [pendingUserMsg, setPendingUserMsg] = useState<{ content: string; images: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
