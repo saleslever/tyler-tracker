@@ -291,9 +291,7 @@ export default function Coach() {
                     data-testid="button-atlas-avatar"
                     data-thinking={isThinking ? "true" : "false"}
                   >
-                    <video autoPlay loop muted playsInline className="w-full h-full object-cover" poster={atlasStill}>
-                      <source src="/atlas-loop.mp4" type="video/mp4" />
-                    </video>
+                    <img src="/atlas-avatar.jpg" alt="Atlas" className="w-full h-full object-cover" decoding="async" />
                   </button>
                   <div className="mt-4 text-center">
                     <div className="font-display text-lg font-bold tracking-widest">ATLAS</div>
@@ -707,9 +705,7 @@ function ChatDrawer(props: {
           <div className="flex items-center justify-between p-4 border-b border-card-border">
             <div className="flex items-center gap-3">
               <div className="atlas-frame w-10 h-10 rounded-full overflow-hidden border-2 border-primary/40" data-thinking={isThinking ? "true" : "false"}>
-                <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                  <source src="/atlas-loop.mp4" type="video/mp4" />
-                </video>
+                <img src="/atlas-avatar.jpg" alt="Atlas" className="w-full h-full object-cover" decoding="async" />
               </div>
               <div>
                 <div className="font-display font-bold tracking-widest">ATLAS</div>

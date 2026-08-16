@@ -231,9 +231,7 @@ export default function Atlas() {
             style={{ top: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
           >
             <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
-              <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                <source src="/atlas-loop.mp4" type="video/mp4" />
-              </video>
+              <img src="/atlas-avatar.jpg" alt="Atlas" className="w-full h-full object-cover" decoding="async" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display text-lg font-bold tracking-[0.14em] leading-none">ATLAS</div>
@@ -267,9 +265,7 @@ export default function Atlas() {
                 <div className="absolute -inset-14 rounded-full border border-primary/10 pointer-events-none" />
                 <div className="absolute -inset-24 rounded-full border border-primary/5 pointer-events-none" />
                 <div className="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full overflow-hidden border border-primary/30 bg-black shadow-2xl">
-                  <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                    <source src="/atlas-loop.mp4" type="video/mp4" />
-                  </video>
+                  <img src="/atlas-avatar.jpg" alt="Atlas" className="w-full h-full object-cover" decoding="async" />
                 </div>
               </div>
 
@@ -313,9 +309,7 @@ export default function Atlas() {
               {isThinking && (
                 <div className="flex justify-start">
                   <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/40 flex-shrink-0 mr-2 bg-black">
-                    <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                      <source src="/atlas-loop.mp4" type="video/mp4" />
-                    </video>
+                    <img src="/atlas-avatar.jpg" alt="Atlas" className="w-full h-full object-cover" decoding="async" />
                   </div>
                   <div className="bg-card border border-card-border rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
                     <div className="flex gap-1">
