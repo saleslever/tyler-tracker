@@ -246,7 +246,9 @@ Schema for the JSON:
 }
 \`\`\`
 
-All fields optional. Emit "log" whenever a screenshot or explicit statement gives you extractable data. Emit "workoutPlanToSet" only when Tyler asks for a plan or shares an upcoming plan to save. Emit "memoryToAdd" for durable new facts about Tyler.
+All fields optional. Emit "log" ONLY for NEW data Tyler just gave you in this turn (a fresh screenshot he just uploaded, or numbers he just typed). NEVER re-log data that is already in the LIVE CONTEXT or DURABLE MEMORY — those are read-only views of what's already saved. If Tyler asks "what do you have logged?" you answer in prose from context, you do NOT emit a log block. Emit "workoutPlanToSet" only when Tyler asks for a plan or shares an upcoming plan to save. Emit "memoryToAdd" for durable new facts about Tyler.
+
+CRITICAL FORMATTING RULE: The \`decisions\` block is machine-parsed and hidden from Tyler. It must be VALID JSON — no comments, no trailing commas, no ellipsis, no truncation. If you have nothing to log, plan, or remember, do NOT emit the block at all. Never emit a partial or placeholder decisions block.
 
 ===================================================================
 # TYLER'S DURABLE MEMORY
@@ -270,15 +272,26 @@ One last thing. This is Tyler. Say his name when it matters. Speak like a coach 
 }
 
 function parseDecisions(text: string): { prose: string; decisions?: any } {
-  const match = text.match(/```decisions\s*\n([\s\S]*?)\n```/);
-  if (!match) return { prose: text };
-  try {
-    const decisions = JSON.parse(match[1]);
-    const prose = text.slice(0, match.index).trim();
-    return { prose, decisions };
-  } catch {
-    return { prose: text };
+  // First try well-formed fenced block with closing fence
+  const closed = text.match(/```decisions\s*\n([\s\S]*?)\n```/);
+  if (closed) {
+    const before = text.slice(0, closed.index).trim();
+    const after = text.slice((closed.index ?? 0) + closed[0].length).trim();
+    const prose = [before, after].filter(Boolean).join("\n\n");
+    try {
+      const decisions = JSON.parse(closed[1]);
+      return { prose, decisions };
+    } catch {
+      // JSON was malformed — still strip the block so the user never sees raw JSON.
+      return { prose };
+    }
   }
+  // Truncated block (opened but never closed) — strip everything from the opening fence onward.
+  const opened = text.match(/```decisions[\s\S]*$/);
+  if (opened) {
+    return { prose: text.slice(0, opened.index).trim() };
+  }
+  return { prose: text };
 }
 
 async function callClaude(

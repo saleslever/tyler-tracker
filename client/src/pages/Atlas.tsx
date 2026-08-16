@@ -372,7 +372,13 @@ function renderInline(text: string): (string | JSX.Element)[] {
 }
 
 function MarkdownLite({ content }: { content: string }) {
-  const lines = content.split(/\n/);
+  // Belt-and-suspenders: strip any leaked ```decisions fenced block (closed or truncated)
+  // in case the server-side parser missed it (malformed JSON, missing fence, etc).
+  const cleaned = content
+    .replace(/```decisions\s*\n[\s\S]*?\n```/g, "")
+    .replace(/```decisions[\s\S]*$/, "")
+    .trim();
+  const lines = cleaned.split(/\n/);
   const blocks: JSX.Element[] = [];
   let buffer: string[] = [];
   let bulletBuffer: string[] = [];
