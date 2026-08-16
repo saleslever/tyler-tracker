@@ -374,9 +374,16 @@ function renderInline(text: string): (string | JSX.Element)[] {
 function MarkdownLite({ content }: { content: string }) {
   // Belt-and-suspenders: strip any leaked ```decisions fenced block (closed or truncated)
   // in case the server-side parser missed it (malformed JSON, missing fence, etc).
+  // Also strip AI-slop markdown syntax (headers, hr dividers) that Atlas shouldn't be using.
   const cleaned = content
     .replace(/```decisions\s*\n[\s\S]*?\n```/g, "")
     .replace(/```decisions[\s\S]*$/, "")
+    // Kill markdown headers — Atlas speaks like a coach, not a doc writer.
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    // Kill horizontal rule dividers
+    .replace(/^\s*---+\s*$/gm, "")
+    // Collapse runs of blank lines
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   const lines = cleaned.split(/\n/);
   const blocks: JSX.Element[] = [];
