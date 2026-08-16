@@ -342,7 +342,7 @@ export default function Atlas() {
               style={{
                 // Space at the bottom so the last message clears the sticky
                 // composer (~5rem) and the fixed tab bar (~3.5rem) plus safe area.
-                paddingBottom: "calc(9rem + env(safe-area-inset-bottom, 0px))",
+                paddingBottom: "calc(7rem + env(safe-area-inset-bottom, 0px))",
               }}
             >
               {messages.map((m) => (
@@ -370,10 +370,10 @@ export default function Atlas() {
 
       {/* ─── INPUT (pinned to viewport bottom via sticky positioning) ─── */}
       <div
-        className="sticky z-30 flex-shrink-0 border-t border-border/40 bg-background/95 backdrop-blur"
+        className="fixed left-0 right-0 z-30 border-t border-border/40 bg-background/95 backdrop-blur"
         style={{
           bottom: "calc(3.5rem + env(safe-area-inset-bottom, 0px))",
-          paddingBottom: "0.5rem",
+          paddingBottom: "0.25rem",
         }}
       >
         <div className="max-w-2xl mx-auto px-3 pt-2 pb-2">
