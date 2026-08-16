@@ -103,13 +103,16 @@ export default function Habits() {
     patch.mutate({ [field]: current ? 0 : 1 } as any);
   }
 
-  // Habit rows — Tyler's framework, in order
+  // Habit rows — Tyler's framework, in order.
+  // Everything is MANUAL now. Tyler ticks each box himself.
+  // Data-derived numbers (protein, calories, steps, fast duration) still show
+  // as `meta` for reference, but they do NOT auto-check the row.
   const rows = [
-    { key: "fast", label: "Fasted 16–20h", icon: Flame, done: derived.fastOk, manual: false, meta: log?.fastingHours ? `${log.fastingHours.toFixed(1)}h` : undefined },
+    { key: "fast", label: "Fasted 16–20h", icon: Flame, done: (log?.fastCompleted ?? 0) === 1, manual: true, field: "fastCompleted" as const, meta: log?.fastingHours ? `${log.fastingHours.toFixed(1)}h` : undefined, hint: derived.fastOk ? "data says done" : undefined },
     { key: "lowCarb", label: satBadge ? "High-carb + basketball (Sat)" : "Low-carb / keto", icon: Utensils, done: satBadge ? (log?.cheatDay ?? 0) === 1 : (log?.lowCarb ?? 0) === 1, manual: true, field: satBadge ? "cheatDay" as const : "lowCarb" as const },
-    { key: "protein", label: "Protein ≥ 200g", icon: Zap, done: derived.proteinOk, manual: false, meta: derived.protein > 0 ? `${Math.round(derived.protein)}g` : undefined },
-    { key: "cals", label: `Calories ≤ ${derived.calorieCap.toLocaleString()}`, icon: Utensils, done: derived.calorieOk, manual: false, meta: derived.calories > 0 ? `${derived.calories.toLocaleString()}` : undefined },
-    { key: "steps", label: "10,000 steps", icon: Footprints, done: derived.stepsOk, manual: false, meta: (log?.steps ?? 0) > 0 ? (log?.steps ?? 0).toLocaleString() : undefined },
+    { key: "protein", label: "Protein ≥ 200g", icon: Zap, done: (log?.proteinHit ?? 0) === 1, manual: true, field: "proteinHit" as const, meta: derived.protein > 0 ? `${Math.round(derived.protein)}g` : undefined, hint: derived.proteinOk ? "data says done" : undefined },
+    { key: "cals", label: `Calories ≤ ${derived.calorieCap.toLocaleString()}`, icon: Utensils, done: (log?.caloriesHit ?? 0) === 1, manual: true, field: "caloriesHit" as const, meta: derived.calories > 0 ? `${derived.calories.toLocaleString()}` : undefined, hint: derived.calorieOk ? "data says done" : undefined },
+    { key: "steps", label: "10,000 steps", icon: Footprints, done: (log?.stepsCompleted ?? 0) === 1, manual: true, field: "stepsCompleted" as const, meta: (log?.steps ?? 0) > 0 ? (log?.steps ?? 0).toLocaleString() : undefined, hint: derived.stepsOk ? "data says done" : undefined },
     { key: "water", label: "1 gallon water", icon: Droplet, done: (log?.water ?? 0) === 1, manual: true, field: "water" as const },
     { key: "workout", label: "Lifted (Mon/Tue/Thu/Fri)", icon: Dumbbell, done: (log?.workout ?? 0) === 1, manual: true, field: "workout" as const },
     { key: "creatine", label: "10g creatine", icon: Pill, done: (log?.creatine ?? 0) === 1, manual: true, field: "creatine" as const },
@@ -201,9 +204,10 @@ export default function Habits() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className={cn("text-sm font-semibold", row.done && "text-green-800")}>{row.label}</div>
-                  <div className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-2">
-                    <span>{row.manual ? "Manual · tap to toggle" : "Auto · from data"}</span>
+                  <div className="text-[10px] tracking-widest uppercase text-muted-foreground flex items-center gap-2 flex-wrap">
+                    <span>Tap to toggle</span>
                     {row.meta && <span className="font-mono text-foreground/70">· {row.meta}</span>}
+                    {(row as any).hint && <span className="text-green-700/80">· {(row as any).hint}</span>}
                   </div>
                 </div>
                 <div className={cn(
@@ -224,7 +228,7 @@ export default function Habits() {
         {/* Footer note */}
         <div className="text-center pt-4 pb-2">
           <p className="text-[10px] tracking-[0.24em] uppercase text-muted-foreground">
-            Auto rows populate when Atlas ingests your screenshots
+            Manual only — tick each box when you complete it
           </p>
         </div>
       </div>

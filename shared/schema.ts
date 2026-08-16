@@ -29,6 +29,8 @@ export const dailyLogs = pgTable("daily_logs", {
   noNicotineAfter3: integer("no_nicotine_after_3").notNull().default(0),
   proteinHit: integer("protein_hit").notNull().default(0),
   caloriesHit: integer("calories_hit").notNull().default(0),
+  fastCompleted: integer("fast_completed").notNull().default(0),
+  stepsCompleted: integer("steps_completed").notNull().default(0),
   // Morning gratitude ritual — three prompts from the Notion doc
   gratitude1: text("gratitude_1"),        // #1 thing you're grateful for
   gratitude3: text("gratitude_3"),        // 3 things

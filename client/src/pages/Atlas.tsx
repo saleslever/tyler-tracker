@@ -260,10 +260,10 @@ export default function Atlas() {
           !hasMessages && "flex flex-col justify-center"
         )}
       >
-        {/* Sticky Atlas header — stays visible while scrolling (sits below fixed mobile top bar) */}
+        {/* Fixed Atlas header — sits below fixed mobile top bar, always visible */}
         {hasMessages && (
           <div
-            className="sticky z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/90 backdrop-blur"
+            className="fixed left-0 right-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/90 backdrop-blur"
             style={{ top: "calc(3.5rem + env(safe-area-inset-top, 0px))" }}
           >
             <div className="w-10 h-10 rounded-full overflow-hidden border border-primary/40 bg-black shrink-0 shadow-md">
@@ -291,7 +291,10 @@ export default function Atlas() {
           </div>
         )}
 
-        <div className="max-w-2xl w-full mx-auto px-4">
+        <div
+          className="max-w-2xl w-full mx-auto px-4"
+          style={hasMessages ? { paddingTop: "4.25rem" } : undefined}
+        >
 
           {/* ── HERO (no messages) ── */}
           {!hasMessages && (
@@ -341,9 +344,10 @@ export default function Atlas() {
             <div
               className="pt-4 space-y-3"
               style={{
-                // Space at the bottom so the last message clears the sticky
-                // composer (~5rem) and the fixed tab bar (~3.5rem) plus safe area.
-                paddingBottom: "calc(7rem + env(safe-area-inset-bottom, 0px))",
+                // Space at the bottom so the last message + typing bubble
+                // clear the fixed composer (~5rem incl. images) and the tab
+                // bar (~3.5rem) plus safe area. Bumped so bubble never clips.
+                paddingBottom: "calc(9.5rem + env(safe-area-inset-bottom, 0px))",
               }}
             >
               {messages.map((m) => (
