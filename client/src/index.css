@@ -164,25 +164,23 @@
   /* Atlas chat shell — fill the viewport between the fixed mobile top bar and bottom nav.
      Bottom clearance is 3.5rem nav + 0.75rem for the primary Atlas button that pokes up,
      plus the iOS safe-area inset. On desktop, both bars disappear (md:hidden). */
-  /* atlas-shell fills the space between the fixed header and the fixed bottom nav.
-     No explicit height — top+bottom positioning does the work. iOS Safari keyboard
-     is handled by the inner composer (position: sticky bottom inside the shell)
-     and the shell content scrolls above it. */
+  /* atlas-shell uses normal document flow (NOT position: fixed) so iOS Safari
+     can natively scroll the input into view when the keyboard opens. Padded to
+     clear the fixed header (top) and the fixed bottom nav (bottom). Height is
+     100dvh so the messages scroller inside can flex to fill. */
   .atlas-shell {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: calc(3.5rem + env(safe-area-inset-top, 0px));
-    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
-    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   }
   @media (min-width: 768px) {
     .atlas-shell {
-      position: relative;
-      top: 0;
-      bottom: 0;
-      height: 100dvh;
-      z-index: auto;
+      /* Desktop keeps flex column, no top/bottom padding needed */
+      padding-top: 0;
+      padding-bottom: 0;
+      min-height: 100dvh;
     }
   }
   ::selection {
