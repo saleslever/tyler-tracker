@@ -41,6 +41,31 @@ export default function Atlas() {
     else document.documentElement.classList.remove("atlas-composing");
     return () => document.documentElement.classList.remove("atlas-composing");
   }, [isFocused]);
+
+  // Track the iOS visual viewport (shrinks when keyboard opens). Set atlas-shell height
+  // to the actual visible area so the composer sits flush against the keyboard.
+  useEffect(() => {
+    const vv = (window as any).visualViewport as VisualViewport | undefined;
+    if (!vv) return;
+    const applyHeight = () => {
+      // Only relevant on mobile (md: uses 100dvh)
+      if (window.innerWidth >= 768) {
+        document.documentElement.style.removeProperty("--atlas-vh");
+        return;
+      }
+      document.documentElement.style.setProperty("--atlas-vh", `${vv.height}px`);
+    };
+    applyHeight();
+    vv.addEventListener("resize", applyHeight);
+    vv.addEventListener("scroll", applyHeight);
+    window.addEventListener("resize", applyHeight);
+    return () => {
+      vv.removeEventListener("resize", applyHeight);
+      vv.removeEventListener("scroll", applyHeight);
+      window.removeEventListener("resize", applyHeight);
+      document.documentElement.style.removeProperty("--atlas-vh");
+    };
+  }, []);
   const [images, setImages] = useState<{ dataUrl: string; name: string }[]>([]);
   const [pendingUserMsg, setPendingUserMsg] = useState<{ content: string; images: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
